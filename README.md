@@ -10,6 +10,19 @@ Riverside CA 92521
 Riverside CA 92521
 
 
+## PUBLICATIONS
+
+The sequence classifiers presented are part of the following peer-reviewed 
+publications. Please cite these two papers to give full credit:
+
+Ounit, R., Wanamaker, S., Close, T. J., & Lonardi, S. (2015). CLARK: fast and 
+accurate classification of metagenomic and genomic sequences using discriminative 
+k-mers. BMC genomics, 16(1), 236.
+
+Ounit, R., & Lonardi, S. (2016). Higher classification sensitivity of short 
+metagenomic reads with CLARK-S. Bioinformatics, 32(24), 3823-3825.
+
+
 ## ABOUT
 
 The problem of DNA sequence classification is central to several application
@@ -54,28 +67,14 @@ GA, September 2015.
 ## LICENCE
 
 The source code of CLARK is distributed under the GNU GPL License. CLARK and its 
-variants (such as CLARK-l) are a free software: you can redistribute it and/or 
-modify it under the terms of the GNU General Public License as published by the 
-Free Software Foundation, either version 3 of the License, or (at your option) 
+variants (such as CLARK-l or CLARK-S) are a free software: you can redistribute it 
+and/or modify it under the terms of the GNU General Public License as published 
+by the Free Software Foundation, either version 3 of the License, or (at your option) 
 any later version. 
 CLARK and its variants are distributed in the hope that it will  be useful, but 
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or 
 FITNESS FOR A PARTICULAR PURPOSE. 
 See the GNU General Public License for more details at http://www.gnu.org/licenses/ 
-Copyright 2013-2017, Rachid Ounit (clark.ucr.help at gmail.com).
-
-
-## PUBLICATIONS
-
-The classifiers in the CLARK framework are part of the following peer-reviewed 
-publications. Please cite these two papers to give full credit:
-
-Ounit, R., Wanamaker, S., Close, T. J., & Lonardi, S. (2015). CLARK: fast and 
-accurate classification of metagenomic and genomic sequences using discriminative 
-k-mers. BMC genomics, 16(1), 236.
-
-Ounit, R., & Lonardi, S. (2016). Higher classification sensitivity of short 
-metagenomic reads with CLARK-S. Bioinformatics, 32(24), 3823-3825.
 
 
 ## RELEASES
