@@ -220,8 +220,8 @@ sets of spaced k-mers (from several spaced seed).
 For the space required in disk, CLARK needs about 36 GB to store the database built 
 for bacteria (at the genus level).
 
-If memory is a concern to you and you have small metagenomes then please consider
- using the RAM-light version, CLARK-l. This tool is designed to run on 4 GB RAM 
+If memory is a concern to you and you have small metagenomes then please consider 
+using the RAM-light version, CLARK-l. This tool is designed to run on 4 GB RAM 
 laptop, thus the memory consumption is the main objective of this tool. 
 CLARK-l can load data from bacteria and viruses databases within 4 GB. 
 If it can't then the user should change the parameter value for the gap 
@@ -233,22 +233,22 @@ approximation) of results you would get by running CLARK or CLARK-S.
 
 ## INSTALLATION
 
-First, download the zipped package of the latest version (v1.2.5.1), available from 
+First, download the zipped package of the latest version, available from 
 the CLARK webpage ("Download tab"), http://clark.cs.ucr.edu.
-Second, uncompress the tar.gz file ("tar -xvf CLARKV1.2.5.1.tar.gz"), then go to 
-the sub-directory "CLARKSCV1.2.5.1" and execute the installation script ("./install.sh"). 
+Second, uncompress the tar.gz file ("tar -xvf CLARKV1.3.0.tar.gz"), then go to 
+the sub-directory "CLARKSCV1.3.0" and execute the installation script ("./install.sh"). 
 
 The installation is done! You can now run CLARK and any of the provided scripts.
 
 The installer builds binaries (CLARK, CLARK-l and CLARK-S, in the folder "exe" in 
-CLARKSCV1.2.5.1). 
+CLARKSCV1.3.0). 
 
 ## SCRIPTS
 
 After the installation, you can also notice that several scripts are available. 
 Especially:
 
-- set_targets.sh and classify_metagenome.sh: They allow you to define your database
+- `set_targets.sh` and `classify_metagenome.sh`: They allow you to define your database
 and to classify your metagenomes against it. set_targets.sh can be called
 indefinitely to build several database(s) (downloaded from NCBI or available 
 "locally" in your disk). 
@@ -256,27 +256,27 @@ Note the last call of set_targets.sh defines the "working database",
 the database that classify_metagenome.sh and other scripts use as reference for their
 computations.
 
-- estimate_abundance.sh: It computes the abundance estimation (count/proportion 
+- `estimate_abundance.sh`: It computes the abundance estimation (count/proportion 
 of objects assigned to targets).
 
-- evaluate_density_confidence.sh and evaluate_density_gamma.sh: These two scripts 
+- `evaluate_density_confidence.sh` and `evaluate_density_gamma.sh`: These two scripts 
 take in input one or several CLARK results (containing confidence/gamma scores) 
 and output/plot the density of assignments per confidence score (or gamma score).
 
-- buildSpacedDB.sh: It creates the sets of discriminate spaced k-mers from the 
+- `buildSpacedDB.sh`: It creates the sets of discriminate spaced k-mers from the 
 selected databases.
 
-- clean.sh: This script will delete permanently all data related (generated and 
+- `clean.sh`: This script will delete permanently all data related (generated and 
 downloaded) of the database directory defined in set_targets.h.
 
-- resetCustomDB.sh: It resets the targets definition with sequences (newly 
+- `resetCustomDB.sh`: It resets the targets definition with sequences (newly 
 added/modified) of the customized database. Any call of this script must be 
 followed by a run of set_target.sh.
 
-- updateTaxonomy.sh: To download the latest taxonomy data (taxonomy id, 
+- `updateTaxonomy.sh`: To download the latest taxonomy data (taxonomy id, 
 accession numbers, etc.) from the NCBI website.
 
-- makeSummaryTables.sh: To build three tables summarizing results from one or several 
+- `makeSummaryTables.sh`: To build three tables summarizing results from one or several 
 CLARK reports file. Given a rank r and a minimum abundance level (i.e., the ratio 
 between number of reads classified to that taxon and the total number of reads in 
 the report file) l, expressed in percent, passed in parameters, this script produces 
@@ -298,12 +298,12 @@ This table provides the hit count distribution of the targets identified per rep
 as well as the total number of reads, the total number of reads classified and the
 alpha-diversity.
 
-- getTargetsKmers_distribution.sh: To print out the distribution of the target-specific
+- `getTargetsKmers_distribution.sh`: To print out the distribution of the target-specific
 k-mers in a file entitled "targets.distribution.csv" in the working database. 
 The parameters for this script are the key parameters used for creating the database,
 i.e., the k-mer length and the minimum k-mers frequency (default 0).
 
-- extractSequences.sh: To extract/filter from the input data, the sequences identified
+- `extractSequences.sh`: To extract/filter from the input data, the sequences identified
 to a specific taxon once the classification is done. This can be used for downstream 
 analysis (analysis of contaminants, genome assembly, etc.).
 Parameters are: The taxonomy id (of the taxon to look up), the address of the file 
@@ -368,42 +368,42 @@ In this section, we describe options directly available with the CLARK executabl
 CLARK offers several options to run the classification. 
 
 A typical command line to run CLARK (or CLARK-l/CLARK-S) looks like:
-$ ./CLARK -k <kmerSize> -T <fileTargets> -t <minFreqTarget> -D <directoryDB/> -O <fileObjects> -o <minFreqObject> -R <fileResults> -m <mode> -n <numberofthreads> ...
+$ ./CLARK -k \<kmerSize\> -T \<fileTargets\> -t \<minFreqTarget\> -D \<directoryDB\> -O \<fileObjects\> -o \<minFreqObject\> -R \<fileResults\> -m \<mode\> -n <numberofthreads> ...
 
 ### Definitions of parameters:
 
--k <kmerSize>,       	 	k-mer length:	integer, >= 2 and <= 32 (in version 1.*). 
+-k \<kmerSize\>,       	 	k-mer length:	integer, >= 2 and <= 32 (in version 1.*). 
 			 	The default value for this parameter is 31, except for CLARK-l (it is 27). 
 				For CLARK-S, k is set to 31 and the maximum number of mismatches is set to 9.
 
--T <fileTargets>,    	 	The targets definition is written in fileTargets: filename.  
+-T \<fileTargets\>,    	 	The targets definition is written in fileTargets: filename.  
 				This is a two-column file (separated by space, comma or tab), such that for each line:
 				column 1: the filename of a reference sequence
 				column 2: the target ID (taxon name, or taxonomy ID, ...) of the reference sequence 
 				(See example below).
 				This parameter is mandatory.
 
--t <minFreqTarget>,    		minimum of k-mer frequency/occurence for the discriminative k-mers:  integer, >=0.
+-t \<minFreqTarget\>,    		minimum of k-mer frequency/occurence for the discriminative k-mers:  integer, >=0.
 				The default value is 0. For example, for 1 (or, 2), the program will discard any 
 				discriminative k-mer that appears only once (or, less than twice).
 
--D <directoryDB/>,   	 	Directory of the database : pathname.  
+-D \<directoryDB/\>,   	 	Directory of the database : pathname.  
 				This parameter is mandatory.
 
--O <fileObjects>,    	 	file containing objects: filename.  
+-O \<fileObjects\>,    	 	file containing objects: filename.  
 				This parameter is mandatory.
 
--P <file1> <file2>,		Paired-end fastq files: filenames.
+-P \<file1\> \<file2\>,		Paired-end fastq files: filenames.
 
--o <minFreqObject>,    		minimum of k-mer frequency or occurence in objects:    integer, >=0.
+-o \<minFreqObject\>,    		minimum of k-mer frequency or occurence in objects:    integer, >=0.
 				This option is only available in the spectrum mode (-m 3).
 
--R <fileResults>,    	 	file to store results:  filename.  
-				Results are stored in CSV format in the file <fileResults>.csv (the extension 
+-R \<fileResults\>,    	 	file to store results:  filename.  
+				Results are stored in CSV format in the file \<fileResults\>.csv (the extension 
 				".csv" is automatically added to the filename).
 				This parameter is mandatory. 
 
--m <mode>,           	 	mode of execution: 0,1,2 or 3
+-m \<mode\>,           	 	mode of execution: 0,1,2 or 3
 				0 (full):    To get detailed results, confidence scores and other statistics.
 					     This mode loads all discriminative (contiguous/spaced) k-mers.
 					     This mode is available for CLARK, CLARK-S and CLARK-l.
@@ -415,19 +415,19 @@ $ ./CLARK -k <kmerSize> -T <fileTargets> -t <minFreqTarget> -D <directoryDB/> -O
 				             This mode loads all discriminative (contiguous/spaced) k-mers.
 					     This mode is available for CLARK, CLARK-S and CLARK-l.
 				3 (spectrum):To classify data that are given in spectrum form (i.e.,  
-					       sequence data are in a two-column file, <k-mer> <count>). 
+					       sequence data are in a two-column file, \<k-mer\> \<count\>). 
 					     This mode is available for CLARK and CLARK-l.
 				
--n <numberofthreads>,	 	number of threads: integer >= 1.
+-n \<numberofthreads\>,	 	number of threads: integer >= 1.
 				The program runs in parallel for the classification and, with the option
 				'--ldm' on, the loading of the database into RAM.
 
--g <iterations>,		"gap" or number of non-overlapping k-mers to pass when creating the
+-g \<iterations\>,		"gap" or number of non-overlapping k-mers to pass when creating the
 				database (for CLARK-l only). The bigger the gap is, the lower the RAM 
 				usage is. The default value is 4, but the user can increase this value if 
 				needed to reduce the RAM usage but this will degrade the sensitivity.
 
--s <factor>,			sampling factor value (for CLARK/CLARK-S only). If you want the program to load 
+-s \<factor\>,			sampling factor value (for CLARK/CLARK-S only). If you want the program to load 
 				in memory only half the discriminative (contiguous/spaced) k-mers then use 
 				"-s 2". If you want a third of these k-mers then use "-s 3", etc.
 				The higher this factor is, the lower the RAM usage is. 
@@ -478,13 +478,13 @@ to chromosomes) then we recommend you copy them to your working directory.
 
 In this section, the working directory is /home/user1/bin/ and the binaries CLARK, CLARK-l 
 and CLARK-S have been copied in it. Indeed,
-
+```
 $ pwd
  /home/user1/bin/
 $ ls
 CLARK CLARK-l CLARK-S
 $
-
+```
 We describe in the following paragraph 1) how to create the targets definition with 
 examples for it, in the case CLARK is set to classify metagenomic samples. Then,
 we describe how to set different modes, use paired-end reads and run multiple threads.
@@ -508,7 +508,7 @@ First, the user must define targets for the classification (the "targets_address
 file). For metagenomics, for a classification at the species-level, then the user 
 must define targets accordingly.  So, at the species level, the targets_addresses.txt 
 file is:
-
+```
 $ cat targets_addresses.txt
 /home/user1/bin/genome_1.fa S1
 /home/user1/bin/genome_2.fa S1
@@ -521,10 +521,10 @@ $ cat targets_addresses.txt
 /home/user1/bin/genome_9.fa S3
 /home/user1/bin/genome_10.fa S3
 $
-
+```
 In this case, there are three distinct targets (S1, S2 and S3) that the program 
 will use for the classification. Defining targets at the genus-level would be:
-
+```
 $ cat targets_addresses.txt
 /home/user1/bin/genome_1.fa G1
 /home/user1/bin/genome_2.fa G1
@@ -537,21 +537,21 @@ $ cat targets_addresses.txt
 /home/user1/bin/genome_9.fa G2
 /home/user1/bin/genome_10.fa G2
 $
-
+```
 In this case, there are 2 distinct targets (G1 and G2). Results and performance of 
 CLARK have been analyzed at the genus and the species level (see the manuscript).
 
 In all these examples, each genome file is given by the absolute path (recommended),
 however the user can also use relative path. Since files are in the working 
 directory (where the binaries are), we can simply have:
-
+```
 $ cat targets_addresses.txt
 ./genome_1.fa G1
 ./genome_2.fa G1
 ./genome_3.fa G1
 ...
 $
-
+```
 Naturally, G1 and G2 are just labels that the user is free to choose. The user 
 can rather use the full genus names (e.g., Staphylococcus and Streptococcus instead of 
 G1, and G2), or, as recommended, the taxonomy ID (i.e., 1279 and 1301 resp.).
@@ -614,20 +614,26 @@ Previous instructions used the default mode of CLARK (i.e., "-m 1"). To use the 
 that will generate detailed results (including confidence scores), add "-m 0".
 
 For example, using 20-mers, to run in express mode:
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./results -m 2
-
+```
 In full mode:
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./results -m 0
-
+```
 Note that
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./results -m 1
+```
 is equivalent to
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./results
-
+```
 In the case objects are given as spectrum (a two-column file), the user should 
 indicate it with the option "-m 3":
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./results -m 3
-
+```
 
 IMPORTANT NOTES:
 Whatever you use CLARK, CLARK-l or CLARK-S:
@@ -665,8 +671,9 @@ from bacterial genomes) and then the database of discriminative spaced 31-mers
 (using the script "buildSpacedDB.sh") must be created.
 
 Step 0 (Set the database and its directory "DBD"):
-
+```
 $ ./set_targets.sh ./DBD/ bacteria --phylum 
+```
 (or $ ./set_targets.sh ./DBD/ bacteria --species)
 
 where "DBD" is the directory where you want to store bacteria genomes and 
@@ -677,24 +684,30 @@ Step 1 (Build the database of discriminative 31-mers):
 If the database files of 31-mers are already created for the database and the rank 
 specified in step 0 then you can skip this step.
 This can be done by running any classification with k=31, for example: 
+```
 $ ./classify_metagenome.sh -O sample.fa -R result
-
+```
 where sample.fa is some fasta file data. This operation is only needed to create the  
 database of discriminative 31-mers.
 
 Step 2 (Create the databases of discriminative spaced k-mers):
 
+```
 $ ./buildSpacedDB.sh
+```
 
 This task will take several hours to create discriminative spaced k-mers for all the
 3 spaced seeds (i.e., about 6 to 7 hours). This operation will write about 60GB 
 of data on disk.
  
 Finally, to classify your metagenome (for example, sample.fq) run:
+```
 $ ./exe/CLARK-S -T ./targets_addresses.txt -D ./DBD/ -O ./sample.fq -R ./result -m 0
+```
 or
+```
 $ ./classify_metagenome.sh -O sample.fq -R result --spaced
-
+```
 Note: If you decide to work with a different taxonomy rank and/or database then 
 you will need to repeat the step 0 and step 1.
 
@@ -704,9 +717,9 @@ you will need to repeat the step 0 and step 1.
 CLARK accepts paired-end reads (fastq/fasta files) as objects. Indicate it with the 
 option "-P" and the two filenames (CLARK will concatenate paired reads with 
 matching ID). An example of command line, using default mode, is:
-
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -P ./sample1.fastq ./sample2.fastq -R paired.results
-
+```
 
 ### Multi-Objects (or multiple sample files):
 
@@ -718,23 +731,24 @@ reload the database for each file). Say the user has 3 fasta files, located in t
 current working directory, ./objects_1.fa, ./objects_2.fa and ./objects_3.fa. 
 To pass these three files at once, create a file (e.g., "objects.txt") containing 
 filenames of these fasta files:
-
+```
 $ cat objects.txt
 ./objects_1.fa
 ./objects_2.fa
 ./objects_3.fa  
 $
-
+```
 The objects.txt file is like a "meta-objects" file. Then, create a meta-results 
 file (called "results.txt") such that the i-th line in it indicates the filename 
 to store results
 of the i-th fasta file indicated in "objects.txt":
-
+```
 $ cat results.txt
 ./results_1
 ./results_2
 ./results_3
 $
+```
 ./results_1.csv will contain results related to ./objects_1.fa, ..., and 
 ./results_3.csv will contain results related to ./objects_3.fa.
 
@@ -747,14 +761,17 @@ Since the program creates results files with extension "csv", so you can create 
 files by using the same filename of the fastq/fasta file as prefix.
 
 For example, if you run:
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.txt -R ./objects.txt
-
+```
 The program will store the results files as ./objects_1.fa.csv, ./objects_2.fa.csv and ./objects_3.fa.csv
 
 Same for paired-end reads:
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -O ./DBD/ -P ./paired1.txt ./paired2.txt -R ./results.txt
-
+```
 where files paired1.txt aand paired2.txt contain addresses of paired-end reads:
+```
 $ cat paired1.txt
 ./sample1_R1.fq
 ./sample2_R1.fq
@@ -769,7 +786,7 @@ $ cat results.txt
 ./results_1
 ./results_2
 ./results_3
-
+```
 Once computations done, results for the paired-end reads for each of the three samples 
 are stored in: results_1.csv, results_2.csv and results_3.csv.
 
@@ -778,8 +795,9 @@ are stored in: results_1.csv, results_2.csv and results_3.csv.
 
 CLARK can exploit parallel threads to increase the computations speed.
 The option to add is "-n <Number of threads>". For example, using 12 threads:
+```
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.txt -R ./results.txt -n 12
-
+```
 
 ### Chromosome arms and Centromeres
 
@@ -790,7 +808,7 @@ targets_addresses.txt file sequences that can be related to centromeres.
 For example, in the case of barley, consider 6 chromosome arms defined by 6 files 
 (./chr_arm1L.fa, ./chr_arm1S.fa, ..., ./chr_arm3L.fa, ./chr_arm3S.fa). If the user 
 does not want to define centromeres, then targets_addresses.txt would look like:
-
+```
 $ cat targets_addresses.txt
 ./chr_arm1L.fa 1HL
 ./chr_arm1S.fa 1HS
@@ -799,11 +817,11 @@ $ cat targets_addresses.txt
 ./chr_arm3L.fa 3HL
 ./chr_arm3S.fa 3HS
 $
-
+```
 If the user wants the program to infer centromere of 2H only, then it will 
 indicate the centromere name for it (2HC) at each target related to the chromosome
  2H (so ./chr_arm2L.fa, and ./chr_arm2S.fa) on the same line:
-
+```
 $ cat targets_addresses.txt
 ./chr_arm1L.fa 1HL
 ./chr_arm1S.fa 1HS
@@ -812,9 +830,9 @@ $ cat targets_addresses.txt
 ./chr_arm3L.fa 3HL
 ./chr_arm3S.fa 3HS
 $
-
+```
 If all centromeres must be inferred, then targets_addresses.txt would look like:
-
+```
 $ cat targets_addresses.txt
 ./chr_arm1L.fa 1HL 1HC
 ./chr_arm1S.fa 1HS 1HC
@@ -823,7 +841,7 @@ $ cat targets_addresses.txt
 ./chr_arm3L.fa 3HL 3HC
 ./chr_arm3S.fa 3HS 3HC
 $
-
+```
 When defining chromosome arms labels, we strongly recommend that the user follows the 
 naming convention used of this example:
 For the N-th chromosome, "NS" is the label for the short arm and "NL" is the 
@@ -860,13 +878,17 @@ Then, the user must indicate what database(s) to consider for the classification
 bacteria, viruses, ..., fungi, human and/or custom.
 
 For example, only bacteria genomes:
+```
 $ ./set_targets.sh <DIR_DB/> bacteria
-
+```
 To work with bacteria, viruses and human:
+```
 $ ./set_targets.sh <DIR_DB/> bacteria viruses human
-
+```
 To work with bacteria, viruses, fungi and human:
+```
 $ ./set_targets.sh <DIR_DB/> bacteria viruses fungi human
+```
 
 To classify against a custom database:
 The user will need to copy/move the sequences (fasta files with accession numbers in the 
@@ -876,10 +898,13 @@ and then run set_targets. In order words, the user must:
 (1) create the directory "Custom" inside  <DIR_DB/> (if it does not exist yet);
 (2) copy/move the sequences of interest in the Custom;
 (3) run:
+```
 $ ./set_targets.sh <DIR_DB/> custom
+```
 or for example, when combining the bacteria genomes with the Custom sequences:
+```
 $ ./set_targets.sh <DIR_DB/> bacteria custom
-
+```
 
 In general case (when the user selects bacteria, viruses, ..., fungi and/or human), 
 if the directory <DIR_DB/> is empty, then the script will download all
@@ -889,9 +914,9 @@ the targets for a given taxonomy rank.
 
 The default taxonomy rank is species. To use a different taxonomy rank, for example, 
 genus, the command line is (from the example selecting bacteria, viruses and human):
-
+```
 $ ./set_targets.sh <DIR_DB/> bacteria viruses human --genus
-
+```
 In the current release, the user can choose between six ranks (species to phylum):
 --species (the default value), --genus, --family, --order, --class or --phylum.
 
@@ -916,9 +941,9 @@ you to pass few parameters.
 
 For example, say objects to be classified are reads in "sample.fa" (e.g., located in the 
 current directory), and results to be stored in "result.csv". A basic command line is:
-
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result
-
+```
 As explained in the section "MANUAL & OPTIONS", thanks to identifiers "-O" and "-R", 
 the script will pass the objects file "sample.fa" and results will be stored
 in "./result.csv". Objects are classified against the targets and the taxonomy rank
@@ -968,15 +993,21 @@ the number of parallel threads, mode, etc.
 We present below some examples of customized classification using classify_metagenome.sh.
 
 ##### To use 20-mers (instead of 31-mers):
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -k 20
-
+```
 ##### To request the full mode:
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0
+```
 
 ##### To classify in full mode multiple sample files (single-end reads):
+```
 $ ./classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0
+```
 
 where, the file "samples.txt" contains the addresses of all the sample files to be run:
+```
 $ cat samples.txt
 ./sample1.fa
 ./sample2.fa
@@ -985,12 +1016,16 @@ $ cat samples.txt
 ./sample5.fq
 ./sample6.fq
 ...
+```
 
 ##### To classify in full mode multiple sample files (paired-end reads):
+```
 $ ./classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0
+```
 
 where, files "samples.R.txt" and "samples.L.txt" contain the addresses of all the fastq 
 files (right and left) to be run:
+```
 $ cat samples.R.txt
 ./sample1.R1.fq
 ./sample2.R1.fq
@@ -1002,42 +1037,56 @@ $ cat samples.L.txt
 ./sample2.R2.fq
 ./sample3.R2.fq
 ...
+```
 
 Observe in this example that the order of right and left paired-end reads of each sample 
 must be preserved in "samples.R.txt" and "samples.L.txt" .
 
 ##### To request the express mode, and 8 threads:
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8
+```
 
 ##### To request the full mode, with gzipped objects file, and using 8 threads:
+```
 $ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped
+```
 
 Another example, in default mode, for classifying paired-end reads (./sample1.fastq 
 and ./sample2.fastq):
+```
 $ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result
+```
 
 Notes:
 This script can run CLARK-l instead of CLARK, for workstations with limited RAM. 
 Then, the user can indicate it with the option  "--light". For example:
-
+```
 $ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --light
-
+```
 This script can run CLARK-S instead of CLARK, if the database files of discriminative
 of spaced k-mers have been built. To use CLARK-S, the option is "--spaced". 
 For example:
-
+```
 $ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced
+```
 
 ##### To run CLARK-S with full mode and using 8 threads:
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --gzipped --spaced
+```
 
 ##### To run CLARK-S with express mode and using 8 threads on a gzipped file:
+```
 $ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced
+```
 
 If you want to run CLARK-S but with a much lower RAM usage then you can decide
 to download only half the discriminative spaced k-mers in memory using "-s 2".
 For example:
+```
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result --spaced -s 2
+```
 
 Note:
 run "./classify_metagenome.sh" in the terminal to prompt the help/usage describing 
@@ -1054,20 +1103,20 @@ assigned to it. This script also allows to apply some filtering conditions (base
 The output format of estimate_abundance.sh is CSV.
 
 For example, say a metagenomic sample contains 100 reads, results by CLARK (full mode) 
-indicates that 20 reads (20%) are assigned to the target T1, 70 (70%) are assigned 
-to T2, and 10 (10%) are not assigned ("NA"). Thus, the abundance estimation program 
-reports a count of 20 (or 22.2% of the assigned reads) for T1, 70 (or 77.7%) for T2, 
+indicates that 20 reads (20\%) are assigned to the target T1, 70 (70\%) are assigned 
+to T2, and 10 (10\%) are not assigned ("NA"). Thus, the abundance estimation program 
+reports a count of 20 (or 22.2\% of the assigned reads) for T1, 70 (or 77.7\%) for T2, 
 and a count of 10 for the category "UNKNOWN" (collecting all unassigned reads or 
 assignments that do not satisfy filtering conditions). 
 We give below examples of command lines.
 
 Parameters and options of this script are:
-
-estimate_abundance.sh -c <minConfidenceScore> -g <minGamma> -D <Directory_Path> -F <result1>.csv <result2>.csv ... <result_n>.csv -a <minAbundance> ... 
-
+```
+$ estimate_abundance.sh -c <minConfidenceScore> -g <minGamma> -D <Directory_Path> -F <result1>.csv <result2>.csv ... <result_n>.csv -a <minAbundance> ... 
+```
 Definition of parameters: 
 
--c <minConfidenceScore>    To filter assignments based on their confidence score (if available) 
+-c \<minConfidenceScore\>    To filter assignments based on their confidence score (if available) 
 			   using the threshold value minConfidenceScore (a value between 0.5 and 1.0). 
                            The abundance estimation for each target will count only
                            assignments with a confidence score higher than minConfidenceScore.
@@ -1076,7 +1125,7 @@ Definition of parameters:
                       	   category UNKNOWN in the abundance estimation report.
                            The default value is 0.5.
 
--g <minGamma>         	   To filter assignments based on their gamma score (if available) using the
+-g \<minGamma\>         	   To filter assignments based on their gamma score (if available) using the
                       	   threshold value minGamma (a value between 0 and 1.0). 
                        	   The abundance estimation for each target will count only
                        	   assignments with a gamma score higher than minGamma.
@@ -1085,11 +1134,11 @@ Definition of parameters:
                        	   category UNKNOWN in the abundance estimation report.
                            The default value is 0.
 
--D <Directory_Path>    	   The directory path of the database (the same you indicated when calling 
+-D \<Directory_Path\>    	   The directory path of the database (the same you indicated when calling 
 			   set_targets.sh). This parameter is required to load scientific names of 
 			   all targets ONLY if you pass results of a metagenomic sample.
 
--F <result1>.csv ... <result_n>.csv	 results file or list of results files produced by CLARK.
+-F \<result1\>.csv ... \<result_n\>.csv	 results file or list of results files produced by CLARK.
                            Important Note: You can pass a results file produced by any mode of 
 				           execution of CLARK (full, express, spectrum, default), 
 					   but if you pass several files, make sure they all have 
@@ -1098,7 +1147,7 @@ Definition of parameters:
                                            and result2.csv should be produced through the same mode 
    					   (e.g., both by full mode).
 
--a <minAbundance(%)>       To filter abundance estimations that are higher than a certain threshold, 
+-a \<minAbundance(\%)\>       To filter abundance estimations that are higher than a certain threshold, 
 			   minAbundance. minAbundance is a percentage value (between 0 and 100).
 
 --highconfidence       	   To automatically count only high confidence assignments for the 
@@ -1118,36 +1167,36 @@ Definition of parameters:
 			   MetaPhlAn's output. When this option is specified this MetaPhlAn-like reporting
 			   is stored in the file "results.mpa" in the working directory.
 
-Examples:
+#### Examples:
 
 i) To get the abundance estimation of the results file, ./result.csv:
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/>
-
+```
 where <DIR_PATH> is the directory of the database you have set with set_targets.sh.
 
 To store its output in a file (e.g., "abundance.csv"), you can do by:
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> > abundance.csv
-
+```
 ii) To filter high confidence assignments for the abundance estimation (i.e., 
 low confidence assignments will then be reported in the UNKNOWN category):
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> --highconfidence
-
+```
 iii) To filter assignnments by using a certain confidence score threshold 
 (for example, 0.8) :
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -c 0.80
-
+```
 To filter assignnments using a gamma score threshold (for example, -g 0.03)
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03
-
+```
 To output the results of the previous command in the mpa format:
-
+```
 $ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03 --mpa
-
+```
 Note:
 Filtering based on the confidence score and/or gamma on a results file is possible
 only if the file was built using the full or spectrum mode. Indeed, default 
@@ -1189,8 +1238,8 @@ Results are in CSV format. Confidence scores and other statistics about assignme
 are computed only in the full/spectrum mode.
 
 In the full mode (extended), the results format is the following for each line:
-<Object_ID>,<hit count in target 1>,...,<hit count in target N>,<Length of object>,<Gamma>,<first assignment>,<hit count of first>,<second assignment>,<hit count of second>,<confidence score> where :
-* the "Object_ID"        is the tag name indicated in the header (after ">" or "@") for each 
+\<Object_ID\>,\<hit count in target 1\>, ...,\<hit count in target N\>,\<Length of object\>,\<Gamma\>,\<first assignment\>,\<hit count of first\>,\<second assignment\>,\<hit count of second\>,\<confidence score\> where :
+* the "Object_ID"        is the tag name indicated in the header (after "\>" or "\@") for each 
 			 object, and N is the number of targets. 
 			 In the spectrum mode, this tag name is merely the filename.
 * hit count in target i  is the number of k-mers specific to target i that are in the object
@@ -1209,10 +1258,10 @@ In the full mode (extended), the results format is the following for each line:
 
 
 In the default or express mode, the results format is the following for each line:
-<Object_ID>,<Length of object>,<1st_assignment>, where :
+\<Object_ID\>,\<Length of object\>,\<1st_assignment\>, where :
 
 * the "Object_ID"        is the tag name indicated in the header 
-                         (after ">" or "@") for each object.
+                         (after "\>" or "\@") for each object.
 * Length of object       is the number of bases the object has.
 * 1st assignment         is the target ID of the target that obtained the highest hit count
                          (ties are broken arbitrarily: the 1st assignment is the 
