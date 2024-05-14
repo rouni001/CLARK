@@ -82,6 +82,18 @@ See the GNU General Public License for more details at http://www.gnu.org/licens
   On 09/01/2014, the version 1.0 is available: 
 This version of CLARK is written in C++ and shell script.  It is designed for 
 64-bit OS, and can be executed on the latest Linux and Mac systems. 
+This versatile method allows the classification of objects sequences against a 
+database of targets. Sequences of targets must be given by standard fasta and/or 
+fastq files, or eventually text file (two-column format, where each line is 
+"k-mer" "count", for example in the case of the file "target.txt" (using 6-mers):
+
+```
+$ cat target.txt
+ATATAT 1234
+GCGCGC 435
+ATTTTT 234
+...
+```
 
   On 02/20/2015, the version 1.1 is available:
 Compared to v1.0, this version is more efficient to store the database in disk
@@ -98,6 +110,7 @@ RAM. The relative reduction is about 16% in average. This improvement also impli
 an increase of the classification speed. This release also includes scripts to 
 facilitate the classification of metagenomic samples (see section "CLASSIFICATION OF 
 METAGENOMIC SAMPLES").
+
 
   On 04/22/2015, the version 1.1.2 is available:
 This release includes scripts to produce the abundance estimation per target (i.e.,
@@ -117,6 +130,7 @@ This release contains the discriminative spaced k-mers (using multiple spaced-se
 This version is still in the beta version while features and code improvements on 
 the RAM usage are on-going. 
 Bug fixes and code improvement are included.
+
   On 12/11/2015, the version 1.2.2-beta is available:
 The speed and RAM usage of the full and spaced mode are significantly improved:
 i) the RAM usage is now scalable and the upper-bound is lower than the maximum 
@@ -161,23 +175,12 @@ An option is added to allow processing of very long reads for the full mode and
 for CLARK-S. Code improvements and bug fixes are included. 
 
    On 02/20/2019, the version 1.2.6 is available:
-A new script is added to extract sequences identified to a specific taxon. The
-script "estimate_abundance.sh" allows now to output the results in the mpa format
-(tab-delimited format from MetaPhlAn).Code improvements and bug fixes are included.
+A new script is added to extract sequences identified to a specific taxon
+"extractSequences.sh". In addition, the script "estimate_abundance.sh" allows now 
+to output the results in the mpa format (tab-delimited format from MetaPhlAn). 
+Code improvements and bug fixes are included.
 
-This versatile method allows the classification of objects sequences against a 
-database of targets. Sequences of targets must be given by standard fasta and/or 
-fastq files, or eventually text file (two-column format, where each line is 
-<k-mer> <count>, for example in the case of the file "target.txt" (using 6-mers):
-
-$ cat target.txt
-ATATAT 1234
-GCGCGC 435
-ATTTTT 234
-...
-)
-
-    On 05/15/2024, the version 1.3.0 is available:
+On 05/15/2024, the version 1.3.0 is available:
 Fix for the error when the bacteria genomes are processed during the database construction.
 Code improvement and refactoring are included.
 
