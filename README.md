@@ -1,9 +1,11 @@
 ## AUTHORS
 
-Rachid Ounit (1), Steve Wanamaker(2), Timothy J Close (2) and
+Rachid Ounit (1), Steve Wanamaker (2), Timothy J Close (2) and
 Stefano Lonardi (1). 
+
 1: Computer Science and Engineering department, University of California, 
 Riverside CA 92521
+
 2: Botany and Plant Sciences department, University of California, 
 Riverside CA 92521
 
@@ -76,11 +78,12 @@ Ounit, R., & Lonardi, S. (2016). Higher classification sensitivity of short
 metagenomic reads with CLARK-S. Bioinformatics, 32(24), 3823-3825.
 
 
-## RELEASE
+## RELEASES
 
   On 09/01/2014, the version 1.0 is available: 
 This version of CLARK is written in C++ and shell script.  It is designed for 
 64-bit OS, and can be executed on the latest Linux and Mac systems. 
+
   On 02/20/2015, the version 1.1 is available:
 Compared to v1.0, this version is more efficient to store the database in disk
 (some non-necessary data were pruned, and thus a relative reduction of about 15%
@@ -89,12 +92,14 @@ loads the database in RAM much faster than before. This version also allows to l
 the database in multithreaded-task. Finally, the v1.1 uses different settings for 
 the sampling method used for the default mode, which leads to an increase of the 
 classification speed of about 5%.
+
   On 04/15/2015, the version 1.1.1 is available:
 Compared to v1.1, this version is more efficient to load the database from disk to
 RAM. The relative reduction is about 16% in average. This improvement also implies
 an increase of the classification speed. This release also includes scripts to 
 facilitate the classification of metagenomic samples (see section "CLASSIFICATION OF 
 METAGENOMIC SAMPLES").
+
   On 04/22/2015, the version 1.1.2 is available:
 This release includes scripts to produce the abundance estimation per target (i.e.,
 the count and proportion of objects assigned to a target) with filtering possible
@@ -102,10 +107,12 @@ on the confidence score. Also, the user can get the density of assigned objects 
 confidence score. The user can also pass to CLARK objects as compressed
 files (GZ format) directly to "classify_metagenome.sh". Finally, bugs fixes and
 code improvement are made.
+
   On 06/03/2015, the version 1.1.3 is available:
 This release extends existing features, simplifies output produced by the full mode
 (to reduce the disk spaced needed for the results file). Bugs fixes and
 code improvement are included.
+
   On 06/15/2015, the version 1.2.1-beta is available:
 This release contains the discriminative spaced k-mers (using multiple spaced-seed).
 This version is still in the beta version while features and code improvements on 
@@ -120,33 +127,40 @@ To analyze results, a script to plot the distribution of the assignments per gam
 score (as done with confidence score) is provided. 
 In addition, the option to create Krona-compatible input files 
 ("http://www.biomedcentral.com/1471-2105/12/385") is available.
+
   On 04/07/2016, the version 1.2.3 is available:
 The classifier CLARK-S is finalized. Scripts to generate the targets definition 
 using the accession number instead of the GI number have been updated. 
 Additional scripts have been added to facilitate the creation and changes 
 of the customized databases. Code improvements and bug fixes are included.
+
    On 04/20/2017, the version 1.2.3.1 is available:
 A new script to summarize results from several reports files is provided. 
 Copyright and email info are updated.	
+
    On 08/21/2017, the version 1.2.3.2 is available:
 The script to summarize results (per report and per taxon identified) across 
 several reports files has been improved/extended. Paired-end reads in Fasta
 files can be passed (not only in fastq format anymore).
 Code improvements and bug fixes are included.
+
    On 11/25/2017, the version 1.2.4 is available:
 In addition to the bacteria/archaea, viruses and human, a database of fungi is 
 made available. A list of 29 reference genomes from RefSeq corresponding to 
 known hospital-acquired infections and other nosocomial diseases represents the 
 first basis of this new database. Code improvements and bug fixes are included.
+
    On 02/13/2018, the version 1.2.5 is available:
 In addition to the bacteria/archaea, viruses, fungi and human database, we 
 extended the fungi database and added the plasmid, plastid and protozoa databases 
 (from RefSeq complete genomes). Copyright update, code improvements and bug fixes 
 are included.
+
    On 09/20/2018, the version 1.2.5.1 is available:
 A new script is added to print the distibution of the target-specific k-mers.
 An option is added to allow processing of very long reads for the full mode and 
 for CLARK-S. Code improvements and bug fixes are included. 
+
    On 02/20/2019, the version 1.2.6 is available:
 A new script is added to extract sequences identified to a specific taxon. The
 script "estimate_abundance.sh" allows now to output the results in the mpa format
@@ -164,6 +178,10 @@ ATTTTT 234
 ...
 )
 
+    On 05/15/2024, the version 1.3.0 is available:
+Fix for the error when the bacteria genomes are processed during the database construction.
+Code improvement and refactoring are included.
+
 
 ## COMPATIBILITY BETWEEN VERSIONS
 
@@ -180,7 +198,7 @@ file of extension *.sz.
 
 ## SOFTWARE & SYSTEM REQUIREMENTS
 
-1) EXTERNAL TOOLS & C++ COMPILER VERSION       
+### EXTERNAL TOOLS & C++ COMPILER VERSION       
 unlike most of other metagenomic and genomic classifiers, CLARK does not require
 Uny tool from the BLAST family, Jellyfish or other external tool. The main
 requirement is a 64-bit operating system (Linux or Mac), and the GNU GCC to
@@ -188,7 +206,7 @@ compile version 4.4 or higher. Multithreading operations are assured by the open
 libraries. If these libraries are not installed, CLARK will run in single-threaded
 task. CLARK is expected to successfully run on recent Mac and Linux OS.
 
-2) MEMORY
+### MEMORY
 CLARK can be RAM consuming, especially when loading large database(s). Latest versions
 since v1.1.1 require about 58 GB in RAM to load the database in default mode (built 
 from  bacteria genomes, default NCBI/RefSeq) and about 156 GB to build that database, 
@@ -350,7 +368,7 @@ CLARK offers several options to run the classification.
 A typical command line to run CLARK (or CLARK-l/CLARK-S) looks like:
 $ ./CLARK -k <kmerSize> -T <fileTargets> -t <minFreqTarget> -D <directoryDB/> -O <fileObjects> -o <minFreqObject> -R <fileResults> -m <mode> -n <numberofthreads> ...
 
-Definitions of parameters:
+### Definitions of parameters:
 
 -k <kmerSize>,       	 	k-mer length:	integer, >= 2 and <= 32 (in version 1.*). 
 			 	The default value for this parameter is 31, except for CLARK-l (it is 27). 
@@ -417,7 +435,7 @@ Definitions of parameters:
 				In the default mode, this factor is set to 2 because it represents a good 
 				trade-off between speed, accuracy and RAM usage.
 
---long,				to indicate that the objects files contains very long/large sequences (e.g.,  
+--long,			to indicate that the objects files contains very long/large sequences (e.g.,  
 				long contig from genome assembly, long sequencing reads from Nanopore or Pacbio, 
 				etc.) and allocated more memory accordingly. 
 				This option is only for running the full mode or running CLARK-S,
@@ -472,7 +490,7 @@ Finally, we explain how to use CLARK for assignning BAC/transcript to chromosome
 centromeres. 
 
 
-1) Generalities, and Default Mode: 
+### Generalities, and Default Mode: 
 
 - Say, for simplicity, the user have ten genomes in its database and each genome is 
 stored into one fasta file and is located in the current working directory (say, 
@@ -565,7 +583,7 @@ If CLARK is run again on the same targets and same k-mer length, then it will di
 load TSK files previously produced. Once the classification is done, 
 the file results.csv is created.
 
-1.1) Exclusion of discriminative k-mers of low frequency in the database
+#### Exclusion of discriminative k-mers of low frequency in the database
 
 The user can request the removal of discriminative k-mers that have a frequency equal
  or lower than a certain threshold (like 1, or 2, or, ...). 
@@ -579,7 +597,7 @@ $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.fa -R ./result
 
 See the "MANUAL & OPTIONS" section for more info.
 
-1.2) Exclusion of k-mers of low frequency in the objects
+### Exclusion of k-mers of low frequency in the objects
 
 Similarly, the user can also request to ignore k-mers in objects that have a frequency 
 equal or lower than a certain threshold (option "-o"). 
@@ -587,7 +605,7 @@ In version 1*, this option is available ONLY for the spectrum mode (mode 3), see
 "MANUAL & OPTIONS".
 
 
-2) Fast, Full and Spectrum Mode:
+### Fast, Full and Spectrum Mode:
 
 Previous instructions used the default mode of CLARK (i.e., "-m 1"). To use the "express"
  mode to get results more quickly, then simply add the option "-m 2". For the "full" mode 
@@ -637,7 +655,7 @@ However, you can use a stricter filtering to get more precise results
 (see option of the script estimate_abundance.sh). 
 
 
-2.1) Running CLARK-S:
+#### Running CLARK-S:
 
 The current release exploits spaced k-mers of length 31 and weight 22. Before 
 classifying your metagenomic sample, the database of discriminative 31-mers (e.g., 
@@ -679,7 +697,7 @@ Note: If you decide to work with a different taxonomy rank and/or database then
 you will need to repeat the step 0 and step 1.
 
 
-3) Paired-end reads:
+### Paired-end reads:
 
 CLARK accepts paired-end reads (fastq/fasta files) as objects. Indicate it with the 
 option "-P" and the two filenames (CLARK will concatenate paired reads with 
@@ -688,7 +706,7 @@ matching ID). An example of command line, using default mode, is:
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -P ./sample1.fastq ./sample2.fastq -R paired.results
 
 
-4) Multi-Objects (or multiple sample files):
+### Multi-Objects (or multiple sample files):
 
 The program can process several sample files at the same time (i.e., no need to 
 reload the database or restart the program for each sample). 
@@ -754,14 +772,14 @@ Once computations done, results for the paired-end reads for each of the three s
 are stored in: results_1.csv, results_2.csv and results_3.csv.
 
 
-5) Multi-threading:
+### Multi-threading:
 
 CLARK can exploit parallel threads to increase the computations speed.
 The option to add is "-n <Number of threads>". For example, using 12 threads:
 $ ./CLARK -k 20 -T ./targets_addresses.txt -D ./DBD/ -O ./objects.txt -R ./results.txt -n 12
 
 
-6) Chromosome arms and Centromeres
+### Chromosome arms and Centromeres
 
 We understand that users can work with chromosome arms as targets. In this case, 
 centromeres can be inferred by CLARK. To allow that, the user must indicate in the 
@@ -827,9 +845,9 @@ Second, we present the script to get the abundance estimation (count and proport
 each target identified), "estimate_abundance.sh", from one or several results file(s).
 
 
-1) Setting and classification
+### Setting and classification
 
-1.1) Step I: Setting targets
+#### Step I: Setting targets
 
 After the installation (./install.sh), the user must create a directory to store all 
 reference sequences (bacteria, viruses, plasmid, plastid, protozoa, fungi, human and custom). 
@@ -886,7 +904,7 @@ Once set_targets.sh is finished, the user can proceed to the step II. However, i
 the user wants to modify the selected databases and/or taxonomy rank, then he/she will 
 need to run again set_targets.sh with updated parameters before proceeding to step II.
 
-1.2) Step II: Running the classification
+#### Step II: Running the classification
 
 The script to run the classification of a metagenomic sample against the database(s) 
 previously set in step I is "classify_metagenome.sh".
@@ -947,13 +965,13 @@ the number of parallel threads, mode, etc.
 
 We present below some examples of customized classification using classify_metagenome.sh.
 
-a) To use 20-mers (instead of 31-mers):
+##### To use 20-mers (instead of 31-mers):
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -k 20
 
-b) To request the full mode:
+##### To request the full mode:
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0
 
-c) To classify in full mode multiple sample files (single-end reads):
+##### To classify in full mode multiple sample files (single-end reads):
 $ ./classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0
 
 where, the file "samples.txt" contains the addresses of all the sample files to be run:
@@ -966,7 +984,7 @@ $ cat samples.txt
 ./sample6.fq
 ...
 
-d) To classify in full mode multiple sample files (paired-end reads):
+##### To classify in full mode multiple sample files (paired-end reads):
 $ ./classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0
 
 where, files "samples.R.txt" and "samples.L.txt" contain the addresses of all the fastq 
@@ -986,10 +1004,10 @@ $ cat samples.L.txt
 Observe in this example that the order of right and left paired-end reads of each sample 
 must be preserved in "samples.R.txt" and "samples.L.txt" .
 
-e) To request the express mode, and 8 threads:
+##### To request the express mode, and 8 threads:
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8
 
-f) To request the full mode, with gzipped objects file, and using 8 threads:
+##### To request the full mode, with gzipped objects file, and using 8 threads:
 $ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped
 
 Another example, in default mode, for classifying paired-end reads (./sample1.fastq 
@@ -1008,10 +1026,10 @@ For example:
 
 $ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced
 
-g) To run CLARK-S with full mode and using 8 threads:
+##### To run CLARK-S with full mode and using 8 threads:
 $ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --gzipped --spaced
 
-h) To run CLARK-S with express mode and using 8 threads on a gzipped file:
+##### To run CLARK-S with express mode and using 8 threads on a gzipped file:
 $ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced
 
 If you want to run CLARK-S but with a much lower RAM usage then you can decide
@@ -1024,7 +1042,7 @@ run "./classify_metagenome.sh" in the terminal to prompt the help/usage describi
 options and parameters.
 
 
-2) Abundance estimation
+### Abundance estimation
 
 The script "estimate_abundance.sh" can analyze CLARK results of a metagenomic sample, 
 and can provide for each target identified, its scientific name, taxonomy id, lineage 
@@ -1202,20 +1220,35 @@ In the default or express mode, the results format is the following for each lin
 ## VERSIONS
 
 version 1.3.0.0		May 15, 2024
+
 Version 1.2.6.1		May 11, 2019.
+
 Version 1.2.6		February 21, 2019.
+
 Version 1.2.5.1		September 20, 2018.
+
 Version 1.2.5		February 13, 2018.
+
 Version 1.2.4         	November 25, 2017.
+
 Version 1.2.3.2		August 21, 2017.
+
 Version 1.2.3.1		February 27, 2017.
+
 Version 1.2.3 		April 7, 2016.
+
 Version 1.2.2-b 	December 11, 2015.
+
 Version 1.2.1-b 	June 15, 2015.
+
 Version 1.1.3 		June 3, 2015.
+
 Version 1.1.2 		April 22, 2015.
+
 Version 1.1.1 		April 15, 2015.
+
 Version 1.1.  		February 20, 2015.
+
 Version 1.0.  		September 01, 2014.
 
 
