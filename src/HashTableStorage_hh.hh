@@ -117,7 +117,7 @@ class EHashtable: public Hashtable
 			);
 		bool addElement(const std::string& 		_kmer);
 
-		bool clear();
+		void clear();
 
 		bool getTargetID(const std::string&		_label,
 			ILBL&					_id
@@ -499,7 +499,7 @@ EHashtable<HKMERr, ELMTr>::~EHashtable()
 }
 
 	template <typename HKMERr, typename ELMTr>
-bool EHashtable<HKMERr, ELMTr>::clear()
+void EHashtable<HKMERr, ELMTr>::clear()
 {
 	m_localIndex = 0;
 	m_kmerSize = 0;

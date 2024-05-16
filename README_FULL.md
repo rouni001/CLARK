@@ -79,7 +79,7 @@ See the GNU General Public License for more details at http://www.gnu.org/licens
 
 ## RELEASES
 
-	On 09/01/2014, the version 1.0 is available: 
+- On 09/01/2014, the version 1.0 is available: 
 This version of CLARK is written in C++ and shell script.  It is designed for 
 64-bit OS, and can be executed on the latest Linux and Mac systems. 
 This versatile method allows the classification of objects sequences against a 
@@ -95,7 +95,7 @@ ATTTTT 234
 ...
 ```
 
-	On 02/20/2015, the version 1.1 is available:
+- On 02/20/2015, the version 1.1 is available:
 Compared to v1.0, this version is more efficient to store the database in disk
 (some non-necessary data were pruned, and thus a relative reduction of about 15%
 can be observed for the disk space needed). The user can also observe the program
@@ -104,7 +104,7 @@ the database in multithreaded-task. Finally, the v1.1 uses different settings fo
 the sampling method used for the default mode, which leads to an increase of the 
 classification speed of about 5%.
 
-	On 04/15/2015, the version 1.1.1 is available:
+- On 04/15/2015, the version 1.1.1 is available:
 Compared to v1.1, this version is more efficient to load the database from disk to
 RAM. The relative reduction is about 16% in average. This improvement also implies
 an increase of the classification speed. This release also includes scripts to 
@@ -112,7 +112,7 @@ facilitate the classification of metagenomic samples (see section "CLASSIFICATIO
 METAGENOMIC SAMPLES").
 
 
-	On 04/22/2015, the version 1.1.2 is available:
+- On 04/22/2015, the version 1.1.2 is available:
 This release includes scripts to produce the abundance estimation per target (i.e.,
 the count and proportion of objects assigned to a target) with filtering possible
 on the confidence score. Also, the user can get the density of assigned objects per 
@@ -120,18 +120,18 @@ confidence score. The user can also pass to CLARK objects as compressed
 files (GZ format) directly to "classify_metagenome.sh". Finally, bugs fixes and
 code improvement are made.
 
-	On 06/03/2015, the version 1.1.3 is available:
+- On 06/03/2015, the version 1.1.3 is available:
 This release extends existing features, simplifies output produced by the full mode
 (to reduce the disk spaced needed for the results file). Bugs fixes and
 code improvement are included.
 
-	On 06/15/2015, the version 1.2.1-beta is available:
+- On 06/15/2015, the version 1.2.1-beta is available:
 This release contains the discriminative spaced k-mers (using multiple spaced-seed).
 This version is still in the beta version while features and code improvements on 
 the RAM usage are on-going. 
 Bug fixes and code improvement are included.
 
-	On 12/11/2015, the version 1.2.2-beta is available:
+- On 12/11/2015, the version 1.2.2-beta is available:
 The speed and RAM usage of the full and spaced mode are significantly improved:
 i) the RAM usage is now scalable and the upper-bound is lower than the maximum 
 usage needed in previous versions; 
@@ -141,46 +141,46 @@ score (as done with confidence score) is provided.
 In addition, the option to create Krona-compatible input files 
 ("http://www.biomedcentral.com/1471-2105/12/385") is available.
 
-	On 04/07/2016, the version 1.2.3 is available:
+- On 04/07/2016, the version 1.2.3 is available:
 The classifier CLARK-S is finalized. Scripts to generate the targets definition 
 using the accession number instead of the GI number have been updated. 
 Additional scripts have been added to facilitate the creation and changes 
 of the customized databases. Code improvements and bug fixes are included.
 
-	On 04/20/2017, the version 1.2.3.1 is available:
+- On 04/20/2017, the version 1.2.3.1 is available:
 A new script to summarize results from several reports files is provided. 
 Copyright and email info are updated.	
 
-	On 08/21/2017, the version 1.2.3.2 is available:
+- On 08/21/2017, the version 1.2.3.2 is available:
 The script to summarize results (per report and per taxon identified) across 
 several reports files has been improved/extended. Paired-end reads in Fasta
 files can be passed (not only in fastq format anymore).
 Code improvements and bug fixes are included.
 
-	On 11/25/2017, the version 1.2.4 is available:
+- On 11/25/2017, the version 1.2.4 is available:
 In addition to the bacteria/archaea, viruses and human, a database of fungi is 
 made available. A list of 29 reference genomes from RefSeq corresponding to 
 known hospital-acquired infections and other nosocomial diseases represents the 
 first basis of this new database. Code improvements and bug fixes are included.
 
-	On 02/13/2018, the version 1.2.5 is available:
+- On 02/13/2018, the version 1.2.5 is available:
 In addition to the bacteria/archaea, viruses, fungi and human database, we 
 extended the fungi database and added the plasmid, plastid and protozoa databases 
 (from RefSeq complete genomes). Copyright update, code improvements and bug fixes 
 are included.
 
-	On 09/20/2018, the version 1.2.5.1 is available:
+- On 09/20/2018, the version 1.2.5.1 is available:
 A new script is added to print the distibution of the target-specific k-mers.
 An option is added to allow processing of very long reads for the full mode and 
 for CLARK-S. Code improvements and bug fixes are included. 
 
-	On 02/20/2019, the version 1.2.6 is available:
+- On 02/20/2019, the version 1.2.6 is available:
 A new script is added to extract sequences identified to a specific taxon
 "extractSequences.sh". In addition, the script "estimate_abundance.sh" allows now 
 to output the results in the mpa format (tab-delimited format from MetaPhlAn). 
 Code improvements and bug fixes are included.
 
-	On 05/16/2024, the version 1.3.0 is available:
+- On 05/16/2024, the version 1.3.0 is available:
 Bugfix for the error when processing bacterial/viral genomes during database 
 construction. The reference for the human genome is updated (October-2023). The list 
 of references to download for plasmid/plastids was extended. And code improvements 
