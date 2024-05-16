@@ -144,6 +144,7 @@ if [ "$2" = "plastid" ]; then
 			echo "Downloading now Plastid genomes:"
 			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.1.1.genomic.fna.gz
 			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.2.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.3.1.genomic.fna.gz
 			echo "Downloading done. Uncompressing files... "
 			gunzip plastid*.genomic.fna.gz
 			echo " * Processing sequences..."
