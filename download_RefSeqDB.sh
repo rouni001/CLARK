@@ -37,21 +37,25 @@ if [ "$2" = "bacteria" ]; then
 		mkdir -m 775 $1/Bacteria
 		cd $1/Bacteria/
 		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/bacteria/assembly_summary.txt
-                awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
 		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
-                chmod 711 ./download.sh
+		chmod 711 ./download.sh
 		echo "Downloading now Bacteria/Archaea complete genomes (quiet mode)... [This operation will take several hours or more to complete.]"
 		./download.sh 2> .$2.tmp
 		rm -f ./assembly_summary.txt
 	
 		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/archaea/assembly_summary.txt > .$2.tmp
-                awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp 
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp 
 		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
-                ./download.sh 2> .$2.tmp
-                rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		./download.sh 2> .$2.tmp
+		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
 
 		echo "Downloading done! Uncompressing files... "
-		gunzip ./*fna.gz
+		find `pwd` -iname "*fna.gz" > ./bacteria.gz.list.txt
+		for gzipped_bacteria_file in `cat ./bacteria.gz.list.txt`
+		do
+			gunzip $gzipped_bacteria_file
+		done
 		find `pwd` -name '*.fna' > ../.bacteria
 		cd ..
 		if  [ ! -s .bacteria ]; then
@@ -71,85 +75,92 @@ if [ "$2" = "viruses" ]; then
 		mkdir -m 775 $1/Viruses
 		cd $1/Viruses/
 		echo "Downloading now Viruses complete genomes:"
-                wget ftp://ftp.ncbi.nih.gov/genomes/refseq/viral/assembly_summary.txt
-                awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
+		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/viral/assembly_summary.txt
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
 		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
-                chmod 711 ./download.sh
-                ./download.sh 2> .$2.tmp
-                echo "Downloading done. Uncompressing files... "
-                gunzip ./*fna.gz
+		chmod 711 ./download.sh
+		./download.sh 2> .$2.tmp
+		echo "Downloading done. Uncompressing files... "
+		find `pwd` -name '*.gz' > ./virus.gz.list.txt
+		for gzipped_virus_file in `cat ./virus.gz.list.txt`
+		do
+			gunzip $gzipped_virus_file
+		done
+		rm -f ./virus.gz.list.txt
 		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
 
-	     	find `pwd` -name '*.fna'  > ../.viruses
-	     	cd ..
-	      	if  [ ! -s .viruses ]; then
-		      echo "Error: Failed to download viruses sequences. "
-		      exit
-	      	fi
-	      	echo "Viruses sequences downloaded!"
+		find `pwd` -name '*.fna'  > ../.viruses
+		cd ..
+		if  [ ! -s .viruses ]; then
+			echo "Error: Failed to download viruses sequences. "
+			exit
+		fi
+		echo "Viruses sequences downloaded!"
 	else
-	      	echo "Viruses sequences already in $1."
+		echo "Viruses sequences already in $1."
 	fi
 	exit
 fi
 
 if [ "$2" = "plasmid" ]; then
         if [ ! -s $1/.plasmid ]; then
-                rm -Rf $1/Plasmid  $1/.plasmid.*
-                mkdir -m 775 $1/Plasmid
-                cd $1/Plasmid/
-                echo "Downloading now Plasmid genomes:"
-		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.1.1.genomic.fna.gz
-		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.2.1.genomic.fna.gz
-		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.3.1.genomic.fna.gz
-		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.4.1.genomic.fna.gz
-                
-		echo "Downloading done. Uncompressing files... "
-                gunzip plasmid*.genomic.fna.gz
-		echo " * Processing sequences..."
-		for fileVir in `ls ./*fna`
-                do
-                	$DIR/exe/exeSeq $fileVir ./
-                done
-		rm -f ./plasmid*.genomic.fna.gz
-		find `pwd` -name '*.fa'  > ../.plasmid
-              	cd ..
-              	if  [ ! -s .plasmid ]; then
-                      echo "Error: Failed to download plasmid sequences. "
-                      exit
-              	fi
-              	echo "Plasmid sequences downloaded!"
+			rm -Rf $1/Plasmid  $1/.plasmid.*
+			mkdir -m 775 $1/Plasmid
+			cd $1/Plasmid/
+			echo "Downloading now Plasmid genomes:"
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.1.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.2.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.3.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.4.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.5.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plasmid/plasmid.6.1.genomic.fna.gz
+					
+			echo "Downloading done. Uncompressing files... "
+			gunzip plasmid*.genomic.fna.gz
+			echo " * Processing sequences..."
+			for file in `ls ./*fna`
+				do
+					$DIR/exe/exeSeq $file ./
+				done
+			rm -f ./plasmid*.genomic.fna.gz
+			find `pwd` -name '*.fa'  > ../.plasmid
+			cd ..
+			if  [ ! -s .plasmid ]; then
+				echo "Error: Failed to download plasmid sequences. "
+				exit
+			fi
+			echo "Plasmid sequences downloaded!"
         else
-              	echo "Plasmid sequences already in $1."
+			echo "Plasmid sequences already in $1."
         fi
         exit
 fi
 
 if [ "$2" = "plastid" ]; then
         if [ ! -s $1/.plastid ]; then
-                rm -Rf $1/Plastid  $1/.plastid.*
-                mkdir -m 775 $1/Plastid
-                cd $1/Plastid/
-                echo "Downloading now Plastid genomes:"
-                wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.1.1.genomic.fna.gz
-                wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.2.1.genomic.fna.gz
-                echo "Downloading done. Uncompressing files... "
-		gunzip plastid*.genomic.fna.gz
-		 echo " * Processing sequences..."
-                for fileVir in `ls ./*fna`
-                do
-                        $DIR/exe/exeSeq $fileVir ./
-                done
-                rm -f ./plastid*.genomic.fna.gz
-                find `pwd` -name '*.fa'  > ../.plastid
-                cd ..
-                if  [ ! -s .plastid ]; then
-                      echo "Error: Failed to download plastid sequences. "
-                      exit
-                fi
-                echo "Plastid sequences downloaded!"
+			rm -Rf $1/Plastid  $1/.plastid.*
+			mkdir -m 775 $1/Plastid
+			cd $1/Plastid/
+			echo "Downloading now Plastid genomes:"
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.1.1.genomic.fna.gz
+			wget ftp://ftp.ncbi.nih.gov/genomes/refseq/plastid/plastid.2.1.genomic.fna.gz
+			echo "Downloading done. Uncompressing files... "
+			gunzip plastid*.genomic.fna.gz
+			echo " * Processing sequences..."
+			for file in `ls ./*fna`
+			do
+					$DIR/exe/exeSeq $file ./
+			done
+			rm -f ./plastid*.genomic.fna.gz
+			find `pwd` -name '*.fa'  > ../.plastid
+			cd ..
+			if  [ ! -s .plastid ]; then
+					echo "Error: Failed to download plastid sequences. "
+					exit
+			fi
+			echo "Plastid sequences downloaded!"
         else
-                echo "Plastid sequences already in $1."
+			echo "Plastid sequences already in $1."
         fi
         exit
 fi
@@ -227,41 +238,41 @@ if [ "$2" = "fungi" ]; then
 #Pichia kudriavzevii strain 129
         wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/983/325/GCF_001983325.1_ASM198332v1/GCF_001983325.1_ASM198332v1_genomic.fna.gz
 #Aspergillus fischeri
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/645/GCF_000149645.1_ASM14964v1/GCF_000149645.1_ASM14964v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/645/GCF_000149645.1_ASM14964v1/GCF_000149645.1_ASM14964v1_genomic.fna.gz
 #Fusarium proliferatum
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/900/067/095/GCA_900067095.1_F._proliferatum_ET1_version_1/GCA_900067095.1_F._proliferatum_ET1_version_1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/900/067/095/GCA_900067095.1_F._proliferatum_ET1_version_1/GCA_900067095.1_F._proliferatum_ET1_version_1_genomic.fna.gz
 #Malassezia spp.
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/985/GCA_001264985.1_ASM126498v1/GCA_001264985.1_ASM126498v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/985/GCA_001264985.1_ASM126498v1/GCA_001264985.1_ASM126498v1_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/835/GCA_001600835.1_JCM_12085_assembly_v001/GCA_001600835.1_JCM_12085_assembly_v001_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/835/GCA_001600835.1_JCM_12085_assembly_v001/GCA_001600835.1_JCM_12085_assembly_v001_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/795/GCA_001600795.1_JCM_11963_assembly_v001/GCA_001600795.1_JCM_11963_assembly_v001_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/795/GCA_001600795.1_JCM_11963_assembly_v001/GCA_001600795.1_JCM_11963_assembly_v001_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/775/GCA_001600775.1_JCM_11348_assembly_v001/GCA_001600775.1_JCM_11348_assembly_v001_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/775/GCA_001600775.1_JCM_11348_assembly_v001/GCA_001600775.1_JCM_11348_assembly_v001_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/551/515/GCA_002551515.1_Malafurf/GCA_002551515.1_Malafurf_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/551/515/GCA_002551515.1_Malafurf/GCA_002551515.1_Malafurf_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/725/GCA_001264725.1_ASM126472v1/GCA_001264725.1_ASM126472v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/725/GCA_001264725.1_ASM126472v1/GCA_001264725.1_ASM126472v1_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/181/695/GCF_000181695.1_ASM18169v1/GCF_000181695.1_ASM18169v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/181/695/GCF_000181695.1_ASM18169v1/GCF_000181695.1_ASM18169v1_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/349/305/GCF_000349305.1_ASM34930v2/GCF_000349305.1_ASM34930v2_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/349/305/GCF_000349305.1_ASM34930v2/GCF_000349305.1_ASM34930v2_genomic.fna.gz
 
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/965/GCA_001264965.1_ASM126496v1/GCA_001264965.1_ASM126496v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/965/GCA_001264965.1_ASM126496v1/GCA_001264965.1_ASM126496v1_genomic.fna.gz
 #Cladosporium sphaerospermum
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/261/425/GCA_000261425.2_UM843Vel2.0/GCA_000261425.2_UM843Vel2.0_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/261/425/GCA_000261425.2_UM843Vel2.0/GCA_000261425.2_UM843Vel2.0_genomic.fna.gz
 #Candida orthopsilosis
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/315/875/GCF_000315875.1_ASM31587v1/GCF_000315875.1_ASM31587v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/315/875/GCF_000315875.1_ASM31587v1/GCF_000315875.1_ASM31587v1_genomic.fna.gz
 #Alternaria alternata
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/642/055/GCF_001642055.1_Altal1/GCF_001642055.1_Altal1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/642/055/GCF_001642055.1_Altal1/GCF_001642055.1_Altal1_genomic.fna.gz
 #Cryptococcus neoformans
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/245/GCF_000149245.1_CNA3/GCF_000149245.1_CNA3_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/245/GCF_000149245.1_CNA3/GCF_000149245.1_CNA3_genomic.fna.gz
 #Trichosporon asahii
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/293/215/GCF_000293215.1_Trichosporon_asahii_1/GCF_000293215.1_Trichosporon_asahii_1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/293/215/GCF_000293215.1_Trichosporon_asahii_1/GCF_000293215.1_Trichosporon_asahii_1_genomic.fna.gz
 #Enterocytozoon bieneusi
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/209/485/GCF_000209485.1_ASM20948v1/GCF_000209485.1_ASM20948v1_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/209/485/GCF_000209485.1_ASM20948v1/GCF_000209485.1_ASM20948v1_genomic.fna.gz
 #Naganishia albida
-	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/599/735/GCA_001599735.1_JCM_2334_assembly_v001/GCA_001599735.1_JCM_2334_assembly_v001_genomic.fna.gz
+		wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/599/735/GCA_001599735.1_JCM_2334_assembly_v001/GCA_001599735.1_JCM_2334_assembly_v001_genomic.fna.gz
 		echo "Downloading done. Uncompressing files... "
 		gunzip ./*fna.gz
 
@@ -272,42 +283,42 @@ if [ "$2" = "fungi" ]; then
 	  		exit
 	  	fi
 	  	echo "Fungi sequences downloaded!"
-	  else
+	else
 	  	echo "Fungi sequences already in $1."
-	  fi
-	  exit
+	fi
+	exit
 fi
 
 if [ "$2" = "protozoa" ]; then
-        if [ ! -s $1/.protozoa ]; then
-                rm -Rf $1/Protozoa  $1/.protozoa.*
-                mkdir -m 775 $1/Protozoa
-                cd $1/Protozoa/
-                echo "Downloading now RefSeq protozoa complete genomes:"
-                wget ftp://ftp.ncbi.nih.gov/genomes/refseq/$2/assembly_summary.txt
-                awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
-                $DIR/exe/dscriptMaker .$2.tmp > ./download.sh
-                chmod 711 ./download.sh
-                ./download.sh 2> .$2.tmp
-                rm -f .$2.tmp ./download.sh ./assembly_summary.txt
-                echo "Downloading done. Uncompressing files... "
-                gunzip ./*fna.gz
+	if [ ! -s $1/.protozoa ]; then
+		rm -Rf $1/Protozoa  $1/.protozoa.*
+		mkdir -m 775 $1/Protozoa
+		cd $1/Protozoa/
+		echo "Downloading now RefSeq protozoa complete genomes:"
+		wget ftp://ftp.ncbi.nih.gov/genomes/refseq/$2/assembly_summary.txt
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
+		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
+		chmod 711 ./download.sh
+		./download.sh 2> .$2.tmp
+		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		echo "Downloading done. Uncompressing files... "
+		gunzip ./*fna.gz
 
-                find `pwd` -name '*.fna' > ../.protozoa
-                cd ../
-                if  [ ! -s .protozoa ]; then
-                        echo "Error: Failed to download protozoa sequences. "
-                        exit
-                fi
-                echo "Protozoa sequences downloaded!"
-          else
-                echo "Protozoa sequences already in $1."
-          fi
-          exit
+		find `pwd` -name '*.fna' > ../.protozoa
+		cd ../
+		if  [ ! -s .protozoa ]; then
+				echo "Error: Failed to download protozoa sequences. "
+				exit
+		fi
+		echo "Protozoa sequences downloaded!"
+	else
+		echo "Protozoa sequences already in $1."
+	fi
+	exit
 fi
 
 if [ "$2" = "human" ]; then
-	  if [ ! -s $1/.human ]; then
+  	if [ ! -s $1/.human ]; then
 	  	rm -Rf $1/Human  $1/.human.*
 	  	mkdir -m 775 $1/Human
 	  	cd $1/Human/
