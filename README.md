@@ -36,8 +36,10 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
-### Version 1.3.0 (May 15, 2024)
-- Fixed error when processing bacterial genomes during database construction.
+### Version 1.3.0 (May 16, 2024)
+- Fixed error when processing bacterial/viral genomes during database construction.
+- Update reference for human genome.
+- Extend list of references to download for plasmid/plastids.
 - Code improvements and refactoring included.
 
 ### Previous Versions

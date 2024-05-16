@@ -37,6 +37,8 @@
 using namespace std;
 
 #define NBNODE 6
+#define MAXNODEITER 100
+
 struct node
 {
 	uint32_t 	parent;
@@ -50,7 +52,7 @@ void getSGFOCP(const vector<node>& _nodes, const uint32_t& _taxid, vector<node>&
 	_line.resize(NBNODE);
 	size_t cpt = 0;
 	size_t it = _taxid, tmp;
-	while (true)
+	while (cpt < MAXNODEITER)
 	{
 		if (it == 1 || _nodes[it].parent == 1)
 			break;

@@ -324,7 +324,7 @@ if [ "$2" = "human" ]; then
 	  	mkdir -m 775 $1/Human
 	  	cd $1/Human/
 	  	echo "Downloading now latest Human genome:"
-	  	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.37_GRCh38.p11/GCF_000001405.37_GRCh38.p11_genomic.fna.gz
+	  	wget ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.fna.gz
 		echo "Downloading done. Uncompressing files... "
 	  	gunzip ./*fna.gz
 

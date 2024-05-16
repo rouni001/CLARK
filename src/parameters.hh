@@ -30,8 +30,7 @@
 #ifndef PARAMETERS_HH
 #define PARAMETERS_HH
 
-#define VERSION "1.2.6.1"
-#define YEARS "2013-2019"
+#define VERSION "1.3.0.0"
 
 #define SB              4       
 #define DBCTRESH	4
