@@ -60,10 +60,10 @@ void getSGFOCP(const vector<node>& _nodes, const uint32_t& _taxid, vector<node>&
 		{
 			_line[ _nodes[it].rank ].rank = 0;
 			_line[ _nodes[it].rank ].parent = it;
-			cpt++;
 		}
 		tmp = it;
 		it = _nodes[tmp].parent;
+		cpt++;
 	}
 }
 

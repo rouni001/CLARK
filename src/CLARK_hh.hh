@@ -2866,7 +2866,7 @@ bool CLARK<HKMERr>::getTargetsData(const char* _filesName, vector<string>& _file
 template <typename HKMERr>
 void CLARK<HKMERr>::print(const bool& _creatingkmfiles, const ITYPE& _samplingfactor) const
 {
-	cerr << "CLARK version " << VERSION << " (UCR CS&E. Copyright "<< YEARS <<" Rachid Ounit, rouni001@cs.ucr.edu) " << endl;
+	cerr << "CLARK version " << VERSION << " (Copyright @The Regents of the University of California. All rights reserved.)" << endl;
 	if (m_minCountTarget > 0)
 	{
 		cerr << "Minimum k-mers occurences in Targets is set to " << m_minCountTarget << endl;
