@@ -41,7 +41,7 @@ using namespace std;
 void printUsage()	
 {
 	cout << endl;
-	cout << "CLARK -- ``CLAssifier based on Reduced K-mers'', UCR CS&E " << YEARS << endl ;
+	cout << "CLARK -- ``CLAssifier based on Reduced K-mers'', UCR CS&E " << endl ;
 	cout << endl;
 	cout << "./CLARK -k <kmerSize> -t <minFreqTarget> -o <minFreqObject> -T <fileTargets> -D <directoryDB/> -O <fileObjects> -R <fileResults> -m <mode> -n <numberofthreads> ...\n\n" << endl;
 	cout << "Definitions of parameters (cf. README file, for details):" << endl;
