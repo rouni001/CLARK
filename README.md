@@ -1,4 +1,4 @@
-# CLARK: Fast and Accurate Sequence Classifier
+# CLARK: Fast and Accurate Sequence Classifier (for Bioinformatics, Genomics and Metagenomics applications)
 
 ## Authors
 
@@ -9,6 +9,14 @@
 
 1. Computer Science and Engineering Department, University of California, Riverside, CA 92521
 2. Botany and Plant Sciences Department, University of California, Riverside, CA 92521
+
+## Introduction
+
+The problem of supervised DNA sequence classification arises in several fields of computational molecular biology. Although this problem has been extensively studied, it is still computationally challenging due to size of the datasets that modern sequencing technologies can produce.
+
+We introduce CLARK a novel approach to classify metagenomic reads at the species or genus level with high accuracy and high speed. Extensive experimental results on various metagenomic samples show that the classification accuracy of CLARK is better or comparable to the best state-of-the-art tools and it is significantly faster than any of its competitors. In its fastest single-threaded mode CLARK classifies, with high accuracy, about 32 million metagenomic short reads per minute. CLARK can also classify BAC clones or transcripts to chromosome arms and centromeric regions.
+
+CLARK is a versatile, fast and accurate sequence classification method, especially useful for metagenomics and genomics applications.
 
 ## Publications
 
