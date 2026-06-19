@@ -19,7 +19,8 @@ Then configure targets and classify reads:
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a step-by-step workflow and
 [docs/MODERNIZATION.md](docs/MODERNIZATION.md) for the reliability fixes in this
-version.
+version. See [docs/TESTING.md](docs/TESTING.md) for the current test coverage
+and known gaps.
 
 ## Authors
 
