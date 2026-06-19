@@ -24,8 +24,7 @@
 #
 
 
-RPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ ! -s "$LDIR/.dbAddress" ]; then
 echo "Please run the script set_targets.sh to define the targets."

@@ -29,8 +29,7 @@
 #			given for each CLARK report file (produced by 
 #			estimate_abundance.sh) passed in parameters.
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ $# -lt 1 ]; then
 echo -n "Usage: "

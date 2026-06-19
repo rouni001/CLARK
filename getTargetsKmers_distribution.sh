@@ -30,8 +30,7 @@
 #			  Filtering options are offered.
 # 
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ $# -lt 2 ]; then
 echo "Usage: $0 <k-mer length: integer between 2 and 32> <min k-mers frequency: default is 0>"

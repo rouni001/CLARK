@@ -33,6 +33,7 @@
 #include <vector>
 #include <iostream>
 #include <cstdlib>
+#include <sstream>
 #include "./dataType.hh"
 #include "./HashTableStorage_hh.hh"
 #include "./spacedKmer.hh"
@@ -49,6 +50,22 @@
 #define MINCFSP		0.75
 #define MINGMSP		0.06
 #define	MXNMLEN		10000
+
+static std::string clarkSizeToString(const size_t value)
+{
+	std::ostringstream out;
+	out << value;
+	return out.str();
+}
+
+static std::string clarkJoinPath(const std::string& folder, const std::string& name)
+{
+	if (folder.empty() || folder[folder.size()-1] == '/')
+	{
+		return folder + name;
+	}
+	return folder + "/" + name;
+}
 
 template <typename HKMERr>
 class CLARK
@@ -246,6 +263,9 @@ class CLARK
 		void getdbName(char * 						_dbname,
 				const int& 					_htID  = 0    	
 			      ) const;
+
+		std::string getdbNameString(const int& 			_htID = 0
+				) const;
 };
 
 #endif
@@ -418,43 +438,37 @@ void CLARK<HKMERr>::clear()
 	m_scoresLines.clear();
 }
 
-template <typename HKMERr>
-void CLARK<HKMERr>::createTargetFilesNames(vector<string>& _filesHT, vector<string>& _filesHTC) const
-{
-	for(size_t t = 0 ; t < m_labels_c.size(); t++)
+	template <typename HKMERr>
+	void CLARK<HKMERr>::createTargetFilesNames(vector<string>& _filesHT, vector<string>& _filesHTC) const
 	{
-		char * fname = (char*) calloc(MXNMLEN, sizeof(char));
-		if (m_isLightLoading)
+		for(size_t t = 0 ; t < m_labels_c.size(); t++)
 		{
-			sprintf(fname, "%s/%s_k%lu_light.ht", m_folder, m_labels_c[t].c_str(), (size_t) m_kmerSize);
+			std::string fname;
+			if (m_isLightLoading)
+			{
+				fname = clarkJoinPath(m_folder, m_labels_c[t] + "_k" + clarkSizeToString((size_t) m_kmerSize) + "_light.ht");
+			}
+			else
+			{
+				fname = clarkJoinPath(m_folder, m_labels_c[t] + "_k" + clarkSizeToString((size_t) m_kmerSize) + ".ht");
+			}
+			_filesHTC.push_back(fname);
 		}
-		else
-		{
-			sprintf(fname, "%s/%s_k%lu.ht", m_folder, m_labels_c[t].c_str(),(size_t) m_kmerSize);
-		}
-		string nameHTO(fname);
-		_filesHTC.push_back(nameHTO);
-		free(fname);
-		fname = NULL;
-	}
 
-	for(size_t t = 0 ; t < m_labels.size(); t++)
-	{
-		char * fname = (char*) calloc(MXNMLEN, sizeof(char)); //100
-		if (m_isLightLoading)
+		for(size_t t = 0 ; t < m_labels.size(); t++)
 		{
-			sprintf(fname, "%s/%s_k%lu_light.ht", m_folder, m_labels_c[t].c_str(), (size_t) m_kmerSize);
+			std::string fname;
+			if (m_isLightLoading)
+			{
+				fname = clarkJoinPath(m_folder, m_labels[t] + "_k" + clarkSizeToString((size_t) m_kmerSize) + "_light.ht");
+			}
+			else
+			{
+				fname = clarkJoinPath(m_folder, m_labels[t] + "_k" + clarkSizeToString((size_t) m_kmerSize) + ".ht");
+			}
+			_filesHT.push_back(fname);
 		}
-		else
-		{
-			sprintf(fname, "%s/%s_k%lu.ht", m_folder, m_labels[t].c_str(), (size_t) m_kmerSize);
-		}
-		string nameHT(fname);
-		_filesHT.push_back(nameHT);
-		free(fname);
-		fname = NULL;
 	}
-}
 
 	template <typename HKMERr>
 void CLARK<HKMERr>::run(const char* _filesToObjects, const char* _fileToResults, const size_t& _mode, const ITYPE& _minCountO, const bool& _spectrumAnalysis, const bool& _isExtended, const bool&  _useWeight)
@@ -805,24 +819,42 @@ void CLARK<HKMERr>::loadComputeObjectsSpectrumData()
 	return;
 }
 
-template <typename HKMERr>
-void CLARK<HKMERr>::getdbName(char *   _dbname, const int& _htID) const
-{
-	size_t sizeHTS =  m_labels.size() + m_labels_c.size();
-	if (m_isLightLoading)
+	template <typename HKMERr>
+	void CLARK<HKMERr>::getdbName(char *   _dbname, const int& _htID) const
 	{
-		sprintf(_dbname,"%sdb_central_k%lu_t%lu_s%lu_m%lu_light_%lu.tsk",m_folder,(size_t)m_kmerSize,sizeHTS,(size_t) HTSIZE,(size_t)m_minCountTarget,(size_t) m_iterKmers);
+		std::string dbname = getdbNameString(_htID);
+		if (dbname.size() >= MXNMLEN)
+		{
+			std::cerr << "Database path is too long: " << dbname << std::endl;
+			exit(1);
+		}
+		strcpy(_dbname, dbname.c_str());
 	}
-	else if (m_weight == m_kmerSize)
-	{
-		sprintf(_dbname,"%sdb_central_k%lu_t%lu_s%lu_m%lu.tsk",m_folder,(size_t)m_kmerSize,sizeHTS,(size_t) HTSIZE,(size_t)m_minCountTarget);
-	}
-	else
-	{
-		sprintf(_dbname,"%s%s/db_central_k%lu_t%lu_s%lu_m%lu_w%lu.tsk",m_folder, m_DSS[_htID-1].getFolder().c_str(),(size_t)m_kmerSize,sizeHTS,(size_t)HTSIZE,(size_t)m_minCountTarget,m_weight);
 
+	template <typename HKMERr>
+	std::string CLARK<HKMERr>::getdbNameString(const int& _htID) const
+	{
+		size_t sizeHTS =  m_labels.size() + m_labels_c.size();
+		std::string basename = "db_central_k" + clarkSizeToString((size_t)m_kmerSize)
+			+ "_t" + clarkSizeToString(sizeHTS)
+			+ "_s" + clarkSizeToString((size_t)HTSIZE)
+			+ "_m" + clarkSizeToString((size_t)m_minCountTarget);
+
+		if (m_isLightLoading)
+		{
+			return clarkJoinPath(m_folder, basename + "_light_" + clarkSizeToString((size_t)m_iterKmers) + ".tsk");
+		}
+		if (m_weight == m_kmerSize)
+		{
+			return clarkJoinPath(m_folder, basename + ".tsk");
+		}
+		if (_htID <= 0 || (size_t)(_htID - 1) >= m_DSS.size())
+		{
+			std::cerr << "Invalid spaced-kmer database id: " << _htID << std::endl;
+			exit(1);
+		}
+		return clarkJoinPath(clarkJoinPath(m_folder, m_DSS[_htID-1].getFolder()), basename + "_w" + clarkSizeToString(m_weight) + ".tsk");
 	}
-}
 
 	template <typename HKMERr>
 void CLARK<HKMERr>::loadSpecificTargetSets(const vector<string>& _filesHT, 
@@ -835,7 +867,6 @@ void CLARK<HKMERr>::loadSpecificTargetSets(const vector<string>& _filesHT,
 	size_t kmersLoaded = 0;
 	ITYPE minCount = m_minCountTarget;
 	m_centralHt = new EHashtable<HKMERr, bigElement>(m_weight, m_labels, m_labels_c, m_DSS);
-	char * cfname = (char*) calloc(MXNMLEN, sizeof(char));
 	size_t fileSize = 0;
 
 	if (m_isSpacedLoading /*m_kmerSize != m_weight*/)
@@ -843,24 +874,18 @@ void CLARK<HKMERr>::loadSpecificTargetSets(const vector<string>& _filesHT,
 		vector<string> names;
 		for(size_t u = 0; u < m_DSS.size(); u++)
 		{
-			getdbName(cfname, u+1);
-			string val(cfname);
-			names.push_back(val);
+			names.push_back(getdbNameString(u+1));
 		}
 		cerr << "Loading databases of spaced k-mers... " << endl;
 		m_centralHt->AddDB(names, fileSize, _samplingFactor);
 		cerr << "Loading done (" << fileSize / 1000000<<" MB read, with sampling factor " << _samplingFactor << ", " << m_centralHt->Size() << " spaced k-mers stored)" << endl;	
-		free(cfname);
-		cfname = NULL;
 		return;
 	}
-	getdbName(cfname);
+	std::string cfname = getdbNameString();
 	cerr << "Loading database [" << cfname << ".*] ..." << endl;
-	if (m_centralHt->Read(cfname, fileSize, m_nbCPU, _samplingFactor, _mmapLoading))
+	if (m_centralHt->Read(cfname.c_str(), fileSize, m_nbCPU, _samplingFactor, _mmapLoading))
 	{
 		cerr << "Loading done (database size: " << fileSize / 1000000<<" MB read, with sampling factor " << _samplingFactor << ")" << endl;
-		free(cfname);
-		cfname = NULL;
 		return;
 	}
 	if ( _filesHT.size() + _filesHTC.size() == 0)
@@ -1063,14 +1088,11 @@ size_t CLARK<HKMERr>::makeSpecificTargetSets(const vector<string>& _filesHT, con
 
 		commonKmersHT.SortAllHashTable(2);
 		commonKmersHT.RemoveCommon(m_labels_c, m_minCountTarget);
-		char * cfname = (char*) calloc(MXNMLEN, sizeof(char)); //100
-		getdbName(cfname);
+			std::string cfname = getdbNameString();
 
-		cerr << "Creating light database in disk..." << endl;
-		uint64_t nbElement = commonKmersHT.Write(cfname,2);
-		free(cfname);
-		cfname = NULL;
-		cerr << nbElement << " " << m_kmerSize << "-mers successfully stored in database." << endl;
+			cerr << "Creating light database in disk..." << endl;
+			uint64_t nbElement = commonKmersHT.Write(cfname.c_str(),2);
+			cerr << nbElement << " " << m_kmerSize << "-mers successfully stored in database." << endl;
 
 		return sizeMotherTable;
 	}
@@ -1280,13 +1302,10 @@ size_t CLARK<HKMERr>::makeSpecificTargetSets(const vector<string>& _filesHT, con
 
 		commonKmersHT.SortAllHashTable(2);
 		commonKmersHT.RemoveCommon(m_labels_c, m_minCountTarget);
-		char * cfname = (char*) calloc(MXNMLEN, sizeof(char)); //130
-		getdbName(cfname);
-		cerr << "Creating database in disk..." << endl;	
-		uint64_t nbElement = commonKmersHT.Write(cfname,2);
-		free(cfname);
-		cfname = NULL;
-		cerr << nbElement << " " << m_kmerSize << "-mers successfully stored in database." << endl;
+			std::string cfname = getdbNameString();
+			cerr << "Creating database in disk..." << endl;
+			uint64_t nbElement = commonKmersHT.Write(cfname.c_str(),2);
+			cerr << nbElement << " " << m_kmerSize << "-mers successfully stored in database." << endl;
 
 		return sizeMotherTable;
 	}
@@ -1496,12 +1515,9 @@ size_t CLARK<HKMERr>::makeSpecificTargetSets(const vector<string>& _filesHT, con
 	commonKmersHT.SaveMultiple(_filesHT, m_labels);
 	commonKmersHT.SortAllHashTable(2);
 	commonKmersHT.RemoveCommon(m_labels_c, m_minCountTarget);
-	char * cfname = (char*) calloc(MXNMLEN, sizeof(char)); //130
-	getdbName(cfname);
+	std::string cfname = getdbNameString();
 	cerr << "Creating database in disk..." << endl;
-	uint64_t nbElement = commonKmersHT.Write(cfname,2);
-	free(cfname);
-	cfname = NULL;
+	uint64_t nbElement = commonKmersHT.Write(cfname.c_str(),2);
 	cerr << nbElement << " " << m_kmerSize << "-mers successfully stored in database." << endl;
 
 	return sizeMotherTable;
@@ -2811,23 +2827,22 @@ bool CLARK<HKMERr>::getTargetsData(const char* _filesName, vector<string>& _file
 	for(size_t t=0 ; t < m_labels_c.size(); t++)
 	{       m_targetsName.push_back(m_labels_c[t]);       }
 
-	char * cfname = (char*) calloc(MXNMLEN, sizeof(char)); //130
-	char * cfname_s = (char*) calloc(MXNMLEN+4, sizeof(char));
+	std::string cfname;
 	if (!m_isSpacedLoading)
-	{	getdbName(cfname);	}
+	{	cfname = getdbNameString();	}
 	else
-	{	getdbName(cfname,1);	}
+	{	cfname = getdbNameString(1);	}
 	
-	sprintf(cfname_s, "%s.ky", cfname);
-	FILE * dbfd_ky = fopen(cfname_s, "r");
-	sprintf(cfname_s, "%s.lb", cfname);
-	FILE * dbfd_lbl = fopen(cfname_s, "r");	
-	sprintf(cfname_s, "%s.sz", cfname);
-        FILE * dbfd_sz = fopen(cfname_s, "r");
+	std::string cfname_ky = cfname + ".ky";
+	std::string cfname_lbl = cfname + ".lb";
+	std::string cfname_sz = cfname + ".sz";
+	FILE * dbfd_ky = fopen(cfname_ky.c_str(), "r");
+	FILE * dbfd_lbl = fopen(cfname_lbl.c_str(), "r");
+        FILE * dbfd_sz = fopen(cfname_sz.c_str(), "r");
 
 	if (dbfd_sz != NULL && dbfd_ky != NULL && dbfd_lbl != NULL)
 	{
-		std::ifstream in(cfname_s, std::ios::binary | std::ios::ate);
+		std::ifstream in(cfname_sz.c_str(), std::ios::binary | std::ios::ate);
         	size_t fileSize = in.tellg();
 
 		if (fileSize == HTSIZE || (m_isLightLoading && fileSize == LHTSIZE))
@@ -2849,10 +2864,6 @@ bool CLARK<HKMERr>::getTargetsData(const char* _filesName, vector<string>& _file
 		cerr << "The program did not find the database files for the provided settings and reference sequences (" << sHTS << " targets). ";
 		cerr << "The program will build them." << endl;
 	}
-	free(cfname);
-	free(cfname_s);
-	cfname = NULL;
-	cfname_s = NULL;
 	if (!areHTfilespresent && m_isSpacedLoading)
 	{
 		cerr << "The program cannot find databases of discriminative spaced k-mers." << endl;

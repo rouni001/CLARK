@@ -28,8 +28,7 @@ if [ "$1" = "--help" ]; then
 	exit
 fi
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 echo "Are you sure you have updated the Custom directory ? (yes/no)"
 read decision

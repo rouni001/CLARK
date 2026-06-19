@@ -1,5 +1,26 @@
 # CLARK: Fast and Accurate Sequence Classifier
 
+## Modernized Quickstart
+
+This repository now includes a reproducible `Makefile` build, safer shell
+wrappers, focused regression tests, and beginner-oriented documentation.
+
+```sh
+./install.sh
+make test
+```
+
+Then configure targets and classify reads:
+
+```sh
+./set_targets.sh /path/to/clark-db bacteria viruses --species
+./classify_metagenome.sh -O sample.fastq -R sample.results.csv -m 2 -n 8
+```
+
+See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a step-by-step workflow and
+[docs/MODERNIZATION.md](docs/MODERNIZATION.md) for the reliability fixes in this
+version.
+
 ## Authors
 
 - **Rachid Ounit** (1)

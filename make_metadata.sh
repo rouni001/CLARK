@@ -1,139 +1,102 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# 
-#   CLARK, CLAssifier based on Reduced K-mers.
-# 
-#
-#   This program is free software: you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation, either version 3 of the License, or
-#   (at your option) any later version.
-#
-#   This program is distributed in the hope that it will be useful,
-#   but WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#   GNU General Public License for more details.
-#
-#   You should have received a copy of the GNU General Public License
-#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#   Copyright @ The Regents of the University of California. All rights reserved.
-#
-#   make_metadata.sh: To create meta-data for the selected database (Bacteria,
-# 		      Viruses, Human or Custom). 
-#
+set -euo pipefail
 
-if [ $# -lt 2 ]; then
+usage() {
+	cat <<'USAGE'
+Usage: ./make_metadata.sh <database name> <database directory>
 
-echo "Usage: $0 <Database name: bacteria, viruses, plasmid, plastid, protozoa, fungi or human> <Directory name for the database>"
+Supported database names:
+  bacteria viruses plasmid plastid protozoa fungi human custom
+USAGE
+}
 
-exit
+script_dir() {
+	local source="${BASH_SOURCE[0]}"
+	while [ -h "$source" ]; do
+		local dir
+		dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+		source="$(readlink "$source")"
+		[[ "$source" != /* ]] && source="$dir/$source"
+	done
+	cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
+}
+
+die() {
+	echo "Error: $*" >&2
+	exit 1
+}
+
+supported_database() {
+	case "$1" in
+		bacteria|viruses|plasmid|plastid|protozoa|fungi|human|custom) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+if [ "$#" -lt 2 ]; then
+	usage
+	exit 1
 fi
 
-DB=$1
-DBDR=$2
+DB="$1"
+DBDR="$2"
 TAXDR="taxonomy"
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR="${CLARK_HOME:-$(script_dir)}"
 
-if [ ! -d $DBDR ]; then
-	echo "Selected directory not found. The program will create it."
-	mkdir -m 775 $DBDR
-	mkdir -m 775 $DBDR/Custom
+supported_database "$DB" || die "unsupported database '$DB'. Supported: bacteria, viruses, plasmid, plastid, protozoa, fungi, human, custom."
 
-	if [ ! -d $DBDR ]; then
-		echo "Failed to find the directory (please check the name of directory $DBDR: Does it exist?). The program will abort."
-		exit
-	fi
-else
-	if [ ! -d $DBDR/Custom ]; then
-		mkdir -m 775 $DBDR/Custom
-	fi
-fi
+mkdir -p "$DBDR/Custom"
 
-if [ ! -d $DBDR/$TAXDR ]; then
+if [ ! -d "$DBDR/$TAXDR" ]; then
 	echo "Taxonomy data missing. The program will download data to $DBDR/$TAXDR."
-	mkdir -m 775 $DBDR/$TAXDR
-	$LDIR/download_taxondata.sh $DBDR/$TAXDR
-fi
-if [ ! -f $DBDR/.taxondata ]; then
-        echo "Failed to find taxonomy files. The program will try to download them..."
-        $LDIR/download_taxondata.sh $DBDR/$TAXDR
-        if [ ! -f $DBDR/.taxondata ]; then
-                echo "Failed to find taxonomy files."
-                echo "The program must abort."
-                exit
-        fi
-fi 
-
-if [ "$DB" != "protozoa" ] && [ "$DB" != "plastid" ] && [ "$DB" != "plasmid" ] && [ "$DB" != "fungi" ] && [ "$DB" != "custom" ] && [ "$DB" != "bacteria" ] && [ "$DB" != "viruses" ] && [ "$DB" != "human" ]; then
-	echo "Failed to recognize the database: '$DB'. "
-	echo "-> Supported databases are 'bacteria', 'viruses', 'plasmid', 'plastid', 'protozoa', 'fungi' and 'human' from NCBI (Please check any typo)."
-	echo " Note that the choice 'bacteria' include the archaea genomes."
-	echo "-> Eventually, the program can build a database from your own sequences (*.fna files) in your disk. "
-	echo "If you want CLARK to use a customized database then please do the following directions: "
-	echo "1) Move your sequences in fasta format with the Accession number to $DBDR/Custom/"
-	echo "2) Run again this command with the option 'custom' "
-	exit
+	mkdir -p "$DBDR/$TAXDR"
+	"$LDIR/download_taxondata.sh" "$DBDR/$TAXDR"
 fi
 
-if [ ! -d $DBDR ]; then
-	echo "The directory $DBDR does not exit. The program will create it."
-	mkdir -m 775 $DBDR
-	if [ ! -d $DBDR ]; then
-	echo  "Failed to create the directory $DBDR. The program must abort." 
-	fi
+if [ ! -f "$DBDR/.taxondata" ]; then
+	echo "Failed to find taxonomy files. The program will try to download them..."
+	"$LDIR/download_taxondata.sh" "$DBDR/$TAXDR"
+	[ -f "$DBDR/.taxondata" ] || die "failed to find taxonomy files"
 fi
 
-if [ ! -s $DBDR/.$DB ]; then
+if [ ! -s "$DBDR/.$DB" ]; then
 	if [ "$DB" != "custom" ]; then
 		echo "Sequences for $DB not found. The program will download them."
-		$LDIR/download_RefSeqDB.sh $DBDR $DB
+		"$LDIR/download_RefSeqDB.sh" "$DBDR" "$DB"
 	else
-		ls $DBDR/Custom/ > $DBDR/.$DB
-		if [ ! -s $DBDR/.$DB ]; then
-			echo "The database directory 'Custom' is empty."
-		        echo "If you want CLARK to use a customized database then please do the following directions: "
-		        echo "1) Move your sequences in fasta format with the Accession number to $DBDR/Custom/"
-		        echo "2) Run again this command with the option 'custom' "
-			exit
+		find "$DBDR/Custom" -type f -name '*.f*' > "$DBDR/.$DB"
+		if [ ! -s "$DBDR/.$DB" ]; then
+			die "the custom database directory '$DBDR/Custom' is empty. Add FASTA files, then rerun with 'custom'."
 		fi
-		find $DBDR/Custom/ -name '*.f*' > $DBDR/.$DB
 	fi
 fi
 
-if [ ! -f $LDIR/exe/getfilesToTaxNodes ] || [ ! -f $LDIR/exe/getAccssnTaxID ]; then
-	echo "Something wrong occurred (source code may be missing or unusable. Did the installation finish properly?). The program must abort."
-	exit
+if [ ! -x "$LDIR/exe/getfilesToTaxNodes" ] || [ ! -x "$LDIR/exe/getAccssnTaxID" ]; then
+	die "required helper executables are missing. Run ./install.sh first."
 fi
 
-if [ ! -s $DBDR/.$DB ]; then
-	echo "Failed to find the downloaded $DB sequences."
-	echo "The program must abort."
-	exit
-fi
+[ -s "$DBDR/.$DB" ] || die "failed to find $DB sequences"
 
-if [ $DB = "human" ]; then
-	cd $DBDR
-	if [ ! -s .$DB ]; then
-		ls ./Human/*.* > .$DB
+if [ "$DB" = "human" ]; then
+	if [ ! -s "$DBDR/.$DB" ]; then
+		find "$DBDR/Human" -type f > "$DBDR/.$DB"
 	fi
-	if [ ! -s .$DB.fileToTaxIDs ]; then
-		for file in `cat .$DB`
-		do
-		echo "$file X 9606 9605 9604 9443 40674 7711" >> .$DB.fileToTaxIDs
-		done
+	if [ ! -s "$DBDR/.$DB.fileToTaxIDs" ]; then
+		while IFS= read -r file || [ -n "$file" ]; do
+			[ -n "$file" ] || continue
+			printf '%s X 9606 9605 9604 9443 40674 7711\n' "$file"
+		done < "$DBDR/.$DB" > "$DBDR/.$DB.fileToTaxIDs"
 	fi
-	exit
+	exit 0
 fi
 
-if [ ! -s $DBDR/.$DB.fileToAccssnTaxID ] ; then
+if [ ! -s "$DBDR/.$DB.fileToAccssnTaxID" ]; then
 	echo "Re-building $DB.fileToAccssnTaxID"
-	$LDIR/exe/getAccssnTaxID $DBDR/.$DB $DBDR/$TAXDR/nucl_accss $DBDR/$TAXDR/merged.dmp > $DBDR/.$DB.fileToAccssnTaxID
+	"$LDIR/exe/getAccssnTaxID" "$DBDR/.$DB" "$DBDR/$TAXDR/nucl_accss" "$DBDR/$TAXDR/merged.dmp" > "$DBDR/.$DB.fileToAccssnTaxID"
 fi
-if [ ! -s $DBDR/.$DB.fileToTaxIDs ]; then
-	echo "$DB: Retrieving taxonomy nodes for each sequence based on taxon ID..."
-	$LDIR/exe/getfilesToTaxNodes $DBDR/$TAXDR/nodes.dmp $DBDR/.$DB.fileToAccssnTaxID > $DBDR/.$DB.fileToTaxIDs
-fi
-exit
 
+if [ ! -s "$DBDR/.$DB.fileToTaxIDs" ]; then
+	echo "$DB: Retrieving taxonomy nodes for each sequence based on taxon ID..."
+	"$LDIR/exe/getfilesToTaxNodes" "$DBDR/$TAXDR/nodes.dmp" "$DBDR/.$DB.fileToAccssnTaxID" > "$DBDR/.$DB.fileToTaxIDs"
+fi
