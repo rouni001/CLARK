@@ -1,12 +1,12 @@
 # CLARK: Fast and Accurate Sequence Classifier
 
-## Modernized Quickstart
+## Quickstart
 
 This repository now includes a reproducible `Makefile` build, safer shell
 scripts, focused regression tests, and beginner-oriented documentation.
 
 ```sh
-scripts/install.sh
+make all
 make test
 ```
 
@@ -57,6 +57,11 @@ CLARK (CLAssifier based on Reduced K-mers) addresses the computational challenge
 CLARK is distributed under the GNU General Public License (GPL) v3. It is free software, available without any warranty. See the GNU General Public License for more details: [http://www.gnu.org/licenses/](http://www.gnu.org/licenses/)
 
 ## Releases
+
+### Version 1.4.1 (June 20, 2026)
+- Fixed C++ warnings/errors messages, bugs related to string/filenames, openMP detection, 
+- Reorganized scripts, added Makefile and updated documentations. 
+- Added regression and github CI tests. 
 
 ### Version 1.3.0 (May 16, 2024)
 - Fixed error when processing bacterial/viral genomes during database construction.
