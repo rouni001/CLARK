@@ -78,7 +78,14 @@ Record these details with each analysis:
 - Database choices and taxonomy rank passed to `set_targets.sh`
 - CLARK command line used for classification
 
-## 5. Troubleshooting
+## 5. Script Layout
+
+Primary commands such as `./install.sh`, `./set_targets.sh`, and
+`./classify_metagenome.sh` remain available at the repository root. Their
+implementations live in `scripts/`, which keeps maintenance utilities organized
+without breaking existing command examples.
+
+## 6. Troubleshooting
 
 - If `classify_metagenome.sh` says targets are not configured, run
   `set_targets.sh` first.

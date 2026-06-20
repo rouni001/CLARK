@@ -19,7 +19,7 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 20 regression tests. It verifies:
+The suite currently contains 21 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
@@ -29,6 +29,7 @@ The suite currently contains 20 regression tests. It verifies:
 - paired-end inputs are passed through correctly
 - `--light` selects `CLARK-l`
 - conflicting `--light` and `--spaced` options are rejected
+- direct `scripts/` entrypoints resolve the repository root correctly
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
 - `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
 - `getfilesToTaxNodes` expands a tiny taxonomy lineage
@@ -54,9 +55,9 @@ below the required minimum.
 
 Current coverage from `make coverage`:
 
-- covered executable C++ lines: 908
-- total executable C++ lines: 5,657
-- line coverage: 16.05%
+- covered executable C++ lines: 915
+- total executable C++ lines: 5,611
+- line coverage: 16.31%
 - required minimum: 10.00%
 
 ## Coverage Limitations
@@ -75,5 +76,4 @@ than for the core classifier algorithm.
   output
 - downloader tests using mocked NCBI manifests instead of live network calls
 - converter tests for tiny contiguous-to-spaced k-mer databases
-- continued replacement of fixed-size buffers and `sprintf` usage, followed by
-  negative-path tests for long filenames and malformed input
+- negative-path tests for long filenames and malformed input

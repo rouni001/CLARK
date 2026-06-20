@@ -621,16 +621,13 @@ void hTable<HKMERr, ELMTr>::elementIterator(uint64_t& _kmer, ELMTr& _cElement) c
 	template <typename HKMERr, typename ELMTr>
 uint64_t hTable<HKMERr, ELMTr>::write(const char* _fileht, const size_t& _iteratorPos, const bool& _clearAfter)
 {
-	char * file_lbl = (char*) calloc(strlen(_fileht)+4,sizeof(char));
-	char * file_key = (char*) calloc(strlen(_fileht)+4,sizeof(char));
-	char * file_sze = (char*) calloc(strlen(_fileht)+4,sizeof(char));
-	sprintf(file_lbl, "%s.lb", _fileht);
-	sprintf(file_key, "%s.ky", _fileht);
-	sprintf(file_sze, "%s.sz", _fileht);
+	const string file_lbl = string(_fileht) + ".lb";
+	const string file_key = string(_fileht) + ".ky";
+	const string file_sze = string(_fileht) + ".sz";
 
-	FILE * fd_l = fopen(file_lbl,"w+");
-	FILE * fd_k = fopen(file_key,"w+");
-	FILE * fd_s = fopen(file_sze,"w+");
+	FILE * fd_l = fopen(file_lbl.c_str(),"w+");
+	FILE * fd_k = fopen(file_key.c_str(),"w+");
+	FILE * fd_s = fopen(file_sze.c_str(),"w+");
 	uint64_t nbElement = 0;
 	uint8_t size = 0;
 	for(ITYPE t = 0; t < HTSIZE; t++)
@@ -676,12 +673,6 @@ uint64_t hTable<HKMERr, ELMTr>::write(const char* _fileht, const size_t& _iterat
 	fclose(fd_l);
 	fclose(fd_k);
 	fclose(fd_s);
-	free(file_lbl); 
-	file_lbl=NULL;
-	free(file_key); 
-	file_key=NULL;
-	free(file_sze); 
-	file_sze=NULL;
 	if (_clearAfter)
  	{       
  		m_table.clear();
@@ -692,13 +683,9 @@ uint64_t hTable<HKMERr, ELMTr>::write(const char* _fileht, const size_t& _iterat
 	template <typename HKMERr, typename ELMTr>
 bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  const size_t& _nbCPU, const ITYPE& _modCollision, const bool& _isfastLoadingRequested)
 {
-	char * file_lbl = (char*) calloc(strlen(_filename)+4,sizeof(char));
-	char * file_key = (char*) calloc(strlen(_filename)+4,sizeof(char));
-	char * file_sze = (char*) calloc(strlen(_filename)+4,sizeof(char));
-
-	sprintf(file_lbl, "%s.lb", _filename);
-	sprintf(file_key, "%s.ky", _filename);
-	sprintf(file_sze, "%s.sz", _filename);
+	const string file_lbl = string(_filename) + ".lb";
+	const string file_key = string(_filename) + ".ky";
+	const string file_sze = string(_filename) + ".sz";
 
 	if (_isfastLoadingRequested)
 	{
@@ -708,7 +695,7 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 
 		// Opening File with sizes
 		_fileSize = HTSIZE;
-		int fd_s = open(file_sze, O_RDONLY);
+		int fd_s = open(file_sze.c_str(), O_RDONLY);
 		if (fd_s == -1)
 		{
 			cerr << "Failed to open " << file_sze << endl;
@@ -773,7 +760,7 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 		size_t _fileSizek = nbElement * sizeof(HKMERr);
 		size_t _fileSizel = nbElement * sizeof(ILBL);
 		// kmers keys
-		int fd_k = open(file_key, O_RDONLY);
+		int fd_k = open(file_key.c_str(), O_RDONLY);
 		if (fd_k == -1)
 		{
 			cerr << "Failed to open " << file_key << endl;
@@ -794,7 +781,7 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 			exit(-1);
 		}
 		/// targets Labels
-		int fd_l = open(file_lbl, O_RDONLY);
+		int fd_l = open(file_lbl.c_str(), O_RDONLY);
 		if (fd_l == -1)
 		{
 			cerr << "Failed to open " << file_lbl << endl;
@@ -860,18 +847,11 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 
 		_fileSize = HTSIZE + _fileSizek + _fileSizel;
 
-		free(file_lbl); 
-		file_lbl=NULL;
-		free(file_key); 
-		file_key=NULL;
-		free(file_sze); 
-		file_sze=NULL;
-
 		return true;
 	}
-	FILE * fd_l = fopen(file_lbl,"r");
-	FILE * fd_k = fopen(file_key,"r");
-	FILE * fd_s = fopen(file_sze,"r");
+	FILE * fd_l = fopen(file_lbl.c_str(),"r");
+	FILE * fd_k = fopen(file_key.c_str(),"r");
+	FILE * fd_s = fopen(file_sze.c_str(),"r");
 
 #define LEN 100000
 
@@ -962,13 +942,6 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 	fclose(fd_k);
 	fclose(fd_s);
 
-	free(file_lbl); 
-	file_lbl=NULL;
-	free(file_key); 
-	file_key=NULL;
-	free(file_sze); 
-	file_sze=NULL;
-
 	return true;	
 }
 
@@ -978,20 +951,16 @@ bool hTable<HKMERr, ELMTr>::addDB(const std::vector<std::string>& _filesname, si
 #define NBHT 3
 
 	vector<FILE*> fd_l(NBHT), fd_k(NBHT), fd_s(NBHT);
-	vector<char*> file_lbl(NBHT,NULL), file_key(NBHT,NULL), file_sze(NBHT,NULL);
+	vector<string> file_lbl(NBHT), file_key(NBHT), file_sze(NBHT);
 	for(size_t t = 0; t < _filesname.size(); t++)
 	{
-		file_lbl[t] = (char*) calloc(strlen(_filesname[t].c_str())+4,sizeof(char));
-		file_key[t] = (char*) calloc(strlen(_filesname[t].c_str())+4,sizeof(char));
-		file_sze[t] = (char*) calloc(strlen(_filesname[t].c_str())+4,sizeof(char));
+		file_lbl[t] = _filesname[t] + ".lb";
+		file_key[t] = _filesname[t] + ".ky";
+		file_sze[t] = _filesname[t] + ".sz";
 
-		sprintf(file_lbl[t], "%s.lb", _filesname[t].c_str());
-		sprintf(file_key[t], "%s.ky", _filesname[t].c_str());
-		sprintf(file_sze[t], "%s.sz", _filesname[t].c_str());
-
-		fd_l[t] = fopen(file_lbl[t],"r");
-		fd_k[t] = fopen(file_key[t],"r");
-		fd_s[t] = fopen(file_sze[t],"r");
+		fd_l[t] = fopen(file_lbl[t].c_str(),"r");
+		fd_k[t] = fopen(file_key[t].c_str(),"r");
+		fd_s[t] = fopen(file_sze[t].c_str(),"r");
 
 		if (fd_l[t] == NULL)
 		{       cerr << "The database of discriminative spaced k-mers is missing: Failed to open " << file_lbl[t] << endl;
@@ -1184,14 +1153,6 @@ bool hTable<HKMERr, ELMTr>::addDB(const std::vector<std::string>& _filesname, si
 		fclose(fd_l[t]);
 		fclose(fd_k[t]);
 		fclose(fd_s[t]);
-
-		free(file_lbl[t]);
-		file_lbl[t]=NULL;
-		free(file_key[t]);
-		file_key[t]=NULL;
-		free(file_sze[t]);
-		file_sze[t]=NULL;
 	}
 	return true;
 }
-

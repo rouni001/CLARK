@@ -112,6 +112,8 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 - **estimate_abundance.sh**: Compute abundance estimation (count/proportion of objects assigned to targets).
 - Additional scripts are provided for various tasks such as building spaced k-mer databases, resetting custom databases, and updating taxonomy data.
 
+Root-level scripts are compatibility launchers. Their implementations are organized under `scripts/`.
+
 ### Basic Example
 
 1. Define targets: `./set_targets.sh <DIR_DB/> bacteria`

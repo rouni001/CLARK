@@ -45,6 +45,12 @@ test_shell_syntax() {
 		"$REPO_DIR/tests/coverage_report.sh"; do
 		bash -n "$script"
 	done
+	for script in "$REPO_DIR"/scripts/*.sh; do
+		case "$(head -n 1 "$script")" in
+			*"bash"*) bash -n "$script" ;;
+			*) sh -n "$script" ;;
+		esac
+	done
 	pass "modern shell entrypoints parse"
 }
 
@@ -59,7 +65,7 @@ test_version_binaries() {
 	for binary in CLARK CLARK-l CLARK-S; do
 		version="$("$REPO_DIR/exe/$binary" --version)"
 		case "$version" in
-			*"Version: 1.3.0.0"*) ;;
+			*"Version: 1.4.1.0-a"*) ;;
 			*) fail "unexpected version output from $binary: $version" ;;
 		esac
 	done
@@ -233,6 +239,34 @@ test_classify_wrapper_rejects_conflicting_variants() {
 		fail "classify wrapper accepted conflicting --light and --spaced options"
 	fi
 	pass "classify wrapper rejects conflicting variants"
+}
+
+test_scripts_directory_entrypoint() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-scripts-layout-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	settings="$tmp/settings"
+	targets="$tmp/targets.txt"
+	dbdir="$tmp/db"
+	input="$tmp/input.fastq"
+	result="$tmp/result.csv"
+	fake_exe="$tmp/fake-exe"
+	capture="$tmp/capture.txt"
+
+	mkdir -p "$dbdir"
+	printf 'target.fa 12345\n' > "$targets"
+	printf -- '-T %s\n-D %s\n' "$targets" "$dbdir/" > "$settings"
+	printf '@r1\nACGT\n+\n!!!!\n' > "$input"
+	create_fake_exe "$fake_exe"
+
+	CLARK_SETTINGS_FILE="$settings" \
+	CLARK_EXE_DIR="$fake_exe" \
+	CLARK_TEST_CAPTURE="$capture" \
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result"
+
+	grep -Fq "binary=CLARK" "$capture" || fail "scripts/ classify entrypoint did not run CLARK"
+	grep -Fq "arg=<$input>" "$capture" || fail "scripts/ classify entrypoint did not preserve input path"
+	pass "scripts directory entrypoints resolve the repository root"
 }
 
 test_get_targets_def_smoke() {
@@ -488,10 +522,10 @@ test_clark_l_label_bug_regression() {
 }
 
 test_ncbi_urls() {
-	if grep -R "ftp://ftp.ncbi.nih.gov\|ftp://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/download_RefSeqDB.sh" "$REPO_DIR/download_taxondata.sh" >/dev/null; then
+	if grep -R "ftp://ftp.ncbi.nih.gov\|ftp://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/scripts/download_RefSeqDB.sh" "$REPO_DIR/scripts/download_taxondata.sh" >/dev/null; then
 		fail "legacy or misspelled NCBI FTP URL remains"
 	fi
-	grep -Fq "https://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/download_taxondata.sh" || fail "taxonomy downloader does not use HTTPS NCBI URL"
+	grep -Fq "https://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/scripts/download_taxondata.sh" || fail "taxonomy downloader does not use HTTPS NCBI URL"
 	pass "NCBI download URLs use HTTPS host"
 }
 
@@ -509,6 +543,7 @@ test_classify_wrapper_quotes_paths
 test_classify_wrapper_gzip
 test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
+test_scripts_directory_entrypoint
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke

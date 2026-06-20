@@ -1272,6 +1272,8 @@ In the default or express mode, the results format is the following for each lin
 
 ## VERSIONS
 
+Version 1.4.1.0-a	June 20, 2026.
+
 version 1.3.0.0		May 16, 2024
 
 Version 1.2.6.1		May 11, 2019.
@@ -1309,5 +1311,4 @@ Version 1.0.  		September 01, 2014.
 
 For any feedback, suggestion, or question, please feel free to contact Rachid Ounit 
 (clark.ucr.help at gmail.com).
-
 
