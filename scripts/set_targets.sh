@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
 	cat <<'USAGE'
-Usage: ./set_targets.sh <Directory_path> <database choice...> [taxonomy rank]
+Usage: scripts/set_targets.sh <Directory_path> <database choice...> [taxonomy rank]
 
 Database choices:
   bacteria viruses plasmid plastid protozoa fungi human custom
@@ -79,7 +79,7 @@ rm -f "$DBDR/.tmp" "$LDIR/.settings" "$LDIR/files_excluded.txt" "$DBDR/files_exc
 subDB=""
 for db in "${DATABASES[@]}"; do
 	echo -n "Collecting metadata of $db... "
-	"$LDIR/make_metadata.sh" "$db" "$DBDR"
+	"$LDIR/scripts/make_metadata.sh" "$db" "$DBDR"
 	[ -s "$DBDR/.$db" ] || die "metadata list for '$db' was not created"
 	[ -f "$DBDR/.taxondata" ] || die "taxonomy data is missing in '$DBDR'"
 	echo "done."

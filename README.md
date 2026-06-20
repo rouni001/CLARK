@@ -3,18 +3,18 @@
 ## Modernized Quickstart
 
 This repository now includes a reproducible `Makefile` build, safer shell
-wrappers, focused regression tests, and beginner-oriented documentation.
+scripts, focused regression tests, and beginner-oriented documentation.
 
 ```sh
-./install.sh
+scripts/install.sh
 make test
 ```
 
 Then configure targets and classify reads:
 
 ```sh
-./set_targets.sh /path/to/clark-db bacteria viruses --species
-./classify_metagenome.sh -O sample.fastq -R sample.results.csv -m 2 -n 8
+scripts/set_targets.sh /path/to/clark-db bacteria viruses --species
+scripts/classify_metagenome.sh -O sample.fastq -R sample.results.csv -m 2 -n 8
 ```
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a step-by-step workflow and
@@ -102,22 +102,23 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 1. Download the latest version from the CLARK webpage: [http://clark.cs.ucr.edu](http://clark.cs.ucr.edu)
 2. Uncompress the tar.gz file: `tar -xvf CLARKV1.3.0.tar.gz`
-3. Navigate to the CLARK directory and run the installation script: `./install.sh`
+3. Navigate to the CLARK directory and run the installation script: `scripts/install.sh`
 
 ## Usage
 
 ### Scripts
 
-- **set_targets.sh** and **classify_metagenome.sh**: Define your database and classify metagenomes.
-- **estimate_abundance.sh**: Compute abundance estimation (count/proportion of objects assigned to targets).
+- **`scripts/set_targets.sh`** and **`scripts/classify_metagenome.sh`**: Define your database and classify metagenomes.
+- **`scripts/estimate_abundance.sh`**: Compute abundance estimation (count/proportion of objects assigned to targets).
 - Additional scripts are provided for various tasks such as building spaced k-mer databases, resetting custom databases, and updating taxonomy data.
 
-Root-level scripts are compatibility launchers. Their implementations are organized under `scripts/`.
+All repository shell scripts live under `scripts/`; the project root no longer
+keeps duplicate script launchers.
 
 ### Basic Example
 
-1. Define targets: `./set_targets.sh <DIR_DB/> bacteria`
-2. Classify metagenome: `./classify_metagenome.sh -O ./sample.fa -R ./result`
+1. Define targets: `scripts/set_targets.sh <DIR_DB/> bacteria`
+2. Classify metagenome: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result`
 
 ## How to Choose the K-mer Length
 
@@ -163,39 +164,37 @@ Scripts provided for metagenomic classification:
 
 1. Create a directory to store reference sequences (e.g., `<DIR_DB/>`).
 2. Define targets:
-   - Only bacteria: `./set_targets.sh <DIR_DB/> bacteria`
-   - Bacteria, viruses, and human: `./set_targets.sh <DIR_DB/> bacteria viruses human`
-   - Bacteria and custom: `./set_targets.sh <DIR_DB/> bacteria
-
- custom`
+   - Only bacteria: `scripts/set_targets.sh <DIR_DB/> bacteria`
+   - Bacteria, viruses, and human: `scripts/set_targets.sh <DIR_DB/> bacteria viruses human`
+   - Bacteria and custom: `scripts/set_targets.sh <DIR_DB/> bacteria custom`
 
 ### Running the Classification
 
 Example commands:
 
-- Classify metagenome: `./classify_metagenome.sh -O ./sample.fa -R ./result`
-- Use 20-mers: `./classify_metagenome.sh -O ./sample.fa -R ./result -k 20`
-- Full mode: `./classify_metagenome.sh -O ./sample.fa -R ./result -m 0`
-- Multiple sample files: `./classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0`
-- Paired-end reads: `./classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0`
-- 8 threads: `./classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8`
-- Gzipped objects file: `./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped`
-- Use CLARK-l: `./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --light`
-- Use CLARK-S: `./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced`
-- CLARK-S with full mode and 8 threads: `./classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --spaced`
-- CLARK-S with express mode on gzipped file: `./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced`
-- Lower RAM usage for CLARK-S: `./classify_metagenome.sh -O ./sample.fa -R ./result --spaced -s 2`
+- Classify metagenome: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result`
+- Use 20-mers: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result -k 20`
+- Full mode: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 0`
+- Multiple sample files: `scripts/classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0`
+- Paired-end reads: `scripts/classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0`
+- 8 threads: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8`
+- Gzipped objects file: `scripts/classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped`
+- Use CLARK-l: `scripts/classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --light`
+- Use CLARK-S: `scripts/classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced`
+- CLARK-S with full mode and 8 threads: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --spaced`
+- CLARK-S with express mode on gzipped file: `scripts/classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced`
+- Lower RAM usage for CLARK-S: `scripts/classify_metagenome.sh -O ./sample.fa -R ./result --spaced -s 2`
 
 ### Abundance Estimation
 
 Example commands:
 
-- Basic usage: `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/>`
-- High confidence assignments: `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> --highconfidence`
-- Filter by confidence score (e.g., 0.8): `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -c 0.80`
-- Filter by gamma score (e.g., 0.03): `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03`
-- Output in MetaPhlAn format: `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03 --mpa`
-- Filter by abundance (e.g., >2%): `./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -a 2`
+- Basic usage: `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/>`
+- High confidence assignments: `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> --highconfidence`
+- Filter by confidence score (e.g., 0.8): `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -c 0.80`
+- Filter by gamma score (e.g., 0.03): `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03`
+- Output in MetaPhlAn format: `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03 --mpa`
+- Filter by abundance (e.g., >2%): `scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -a 2`
 
 ## Results Format
 

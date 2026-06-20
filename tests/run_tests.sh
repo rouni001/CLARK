@@ -37,11 +37,11 @@ REQUIRED_EXECUTABLES=(
 
 test_shell_syntax() {
 	for script in \
-		"$REPO_DIR/install.sh" \
-		"$REPO_DIR/classify_metagenome.sh" \
-		"$REPO_DIR/set_targets.sh" \
-		"$REPO_DIR/make_metadata.sh" \
-		"$REPO_DIR/download_taxondata.sh" \
+		"$REPO_DIR/scripts/install.sh" \
+		"$REPO_DIR/scripts/classify_metagenome.sh" \
+		"$REPO_DIR/scripts/set_targets.sh" \
+		"$REPO_DIR/scripts/make_metadata.sh" \
+		"$REPO_DIR/scripts/download_taxondata.sh" \
 		"$REPO_DIR/tests/coverage_report.sh"; do
 		bash -n "$script"
 	done
@@ -52,6 +52,14 @@ test_shell_syntax() {
 		esac
 	done
 	pass "modern shell entrypoints parse"
+}
+
+test_no_root_shell_scripts() {
+	if find "$REPO_DIR" -maxdepth 1 -type f -name '*.sh' | grep -q .; then
+		find "$REPO_DIR" -maxdepth 1 -type f -name '*.sh' >&2
+		fail "root-level shell scripts remain; use scripts/ as the single script home"
+	fi
+	pass "repository root has no duplicated shell scripts"
 }
 
 test_required_executables() {
@@ -140,7 +148,7 @@ test_classify_wrapper_quotes_paths() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" -m 2 -n 4
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" -m 2 -n 4
 
 	grep -Fq "arg=<$targets>" "$capture" || fail "target path with spaces was not preserved"
 	grep -Fq "arg=<$dbdir/>" "$capture" || fail "database path with spaces was not preserved"
@@ -172,7 +180,7 @@ test_classify_wrapper_gzip() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" --gzipped
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" --gzipped
 
 	grep -Fq "object-bytes=16" "$capture" || fail "gzipped input was not decompressed before classification"
 	if find "$tmp" -maxdepth 1 -type d -name 'CLARKGZP.*' | grep -q .; then
@@ -204,7 +212,7 @@ test_classify_wrapper_paired_light_variant() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -P "$input1" "$input2" -R "$result" --light
+		"$REPO_DIR/scripts/classify_metagenome.sh" -P "$input1" "$input2" -R "$result" --light
 
 	grep -Fq "binary=CLARK-l" "$capture" || fail "--light did not select CLARK-l"
 	grep -Fq "arg=<$input1>" "$capture" || fail "paired input 1 path was not preserved"
@@ -235,7 +243,7 @@ test_classify_wrapper_rejects_conflicting_variants() {
 	if CLARK_SETTINGS_FILE="$settings" \
 		CLARK_EXE_DIR="$fake_exe" \
 		CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" --light --spaced >/dev/null 2>&1; then
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" --light --spaced >/dev/null 2>&1; then
 		fail "classify wrapper accepted conflicting --light and --spaced options"
 	fi
 	pass "classify wrapper rejects conflicting variants"
@@ -537,6 +545,7 @@ test_portable_script_paths() {
 }
 
 test_shell_syntax
+test_no_root_shell_scripts
 test_required_executables
 test_version_binaries
 test_classify_wrapper_quotes_paths

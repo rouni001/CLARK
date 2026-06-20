@@ -27,7 +27,7 @@
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ ! -s "$LDIR/.dbAddress" ]; then
-echo "Please run the script set_targets.sh to define the targets."
+echo "Please run scripts/set_targets.sh to define the targets."
 exit
 fi
 

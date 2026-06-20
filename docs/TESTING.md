@@ -1,7 +1,7 @@
 # Testing and Coverage Notes
 
 The current regression suite is intentionally lightweight. It is designed to
-catch install, wrapper, and portability regressions quickly on both Linux and
+catch install, script, and portability regressions quickly on both Linux and
 macOS.
 
 Run:
@@ -19,12 +19,13 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 21 regression tests. It verifies:
+The suite currently contains 22 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
 - modernized shell entrypoints parse successfully
-- `classify_metagenome.sh` preserves paths with spaces
+- the repository root does not contain duplicated shell scripts
+- `scripts/classify_metagenome.sh` preserves paths with spaces
 - gzipped inputs are decompressed and temporary files are cleaned up
 - paired-end inputs are passed through correctly
 - `--light` selects `CLARK-l`
