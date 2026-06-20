@@ -48,6 +48,10 @@ The suite currently contains 20 regression tests. It verifies:
 `build/light`, and `build/spaced` copies back to their original `src/` paths so
 shared lines are counted once.
 
+GitHub Actions runs `make test` on Linux and macOS, and runs `make coverage` as
+a dedicated coverage gate. The PR should not be merged if the coverage job drops
+below the required minimum.
+
 Current coverage from `make coverage`:
 
 - covered executable C++ lines: 908

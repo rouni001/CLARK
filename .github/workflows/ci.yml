@@ -21,3 +21,13 @@ jobs:
 
       - name: Test
         run: make test
+
+  coverage:
+    name: coverage
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Coverage gate
+        run: make coverage
