@@ -22,8 +22,7 @@
 #   updateTaxonomy.sh: To download latest files of taxonomy tree data from NCBI site. 
 #
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 for DIR in `cat $LDIR/.DBDirectory`
 do

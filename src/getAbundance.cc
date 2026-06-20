@@ -465,7 +465,7 @@ int main(int argc, char** argv)
 	}
 	std::sort(res.begin(), res.end());	
 	if (i_names < 0)
-	{ 	cout << "Name,TargetID,";	}
+	{ 	cout << "Name,TargetID";	}
 	else
 	{	cout << "Name,TaxID,Lineage";	
 

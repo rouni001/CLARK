@@ -22,8 +22,7 @@
 #   cleanDB.sh: To erase all databases directories/files generated/downloaded. 
 #
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ ! -s "$LDIR/.DBDirectory" ]; then
 echo "There is no database directory to clean"

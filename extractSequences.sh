@@ -22,8 +22,7 @@
 #		      to a specified taxon.
 #
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ $# -lt 3 ]; then
 $LDIR/exe/extractSeqs

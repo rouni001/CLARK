@@ -1,124 +1,114 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# 
-#   CLARK, CLAssifier based on Reduced K-mers.
-# 
-#
-#   This program is free software: you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation, either version 3 of the License, or
-#   (at your option) any later version.
-#
-#   This program is distributed in the hope that it will be useful,
-#   but WITHOUT ANY WARRANTY; without even the implied warranty of
-#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#   GNU General Public License for more details.
-#
-#   You should have received a copy of the GNU General Public License
-#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-#   Copyright @ The Regents of the University of California. All rights reserved.
-#
-#   set_targets.sh: To create targets definition of selected databases
-#            (Bacteria, Viruses, Plasmid, Protozoa, Fungi Human and Custom).
+set -euo pipefail
 
-if [ $# -lt 2 ]; then
+usage() {
+	cat <<'USAGE'
+Usage: ./set_targets.sh <Directory_path> <database choice...> [taxonomy rank]
 
-echo "Usage: $0 <Directory_path> <Database_choice+: bacteria, viruses, plasmid, plastid, protozoa, fungi, human, custom. Recommended database is: bacteria viruses> <taxonomy rank: --phylum, --class, --order, --family, --genus or --species. Default is: --species>"
+Database choices:
+  bacteria viruses plasmid plastid protozoa fungi human custom
 
-exit
+Taxonomy rank:
+  --species (default), --genus, --family, --order, --class, --phylum
+USAGE
+}
+
+script_dir() {
+	local source="${BASH_SOURCE[0]}"
+	while [ -h "$source" ]; do
+		local dir
+		dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+		source="$(readlink "$source")"
+		[[ "$source" != /* ]] && source="$dir/$source"
+	done
+	cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
+}
+
+die() {
+	echo "Error: $*" >&2
+	exit 1
+}
+
+rank_value() {
+	case "$1" in
+		--species) echo 0 ;;
+		--genus) echo 1 ;;
+		--family) echo 2 ;;
+		--order) echo 3 ;;
+		--class) echo 4 ;;
+		--phylum) echo 5 ;;
+		*) return 1 ;;
+	esac
+}
+
+if [ "$#" -lt 2 ]; then
+	usage
+	exit 1
 fi
 
-DBDR=$1
+DBDR="$1"
+shift
 RANK=0
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+DATABASES=()
 
-if [ ! -d $DBDR ]; then
-	echo "Selected directory not found. The program will create it."
-	mkdir -m 775 $DBDR
-	if [ ! -d $DBDR ]; then
-	echo "Failed to create the directory (please check the name of directory $DBDR and whether it exists). The program will abort."
-	exit
-	fi
-fi
-echo $DBDR > $LDIR/.DBDirectory
-for var in $@
-do
-      if [ "$var" = "--species" ]; then
-        RANK=0
-        break
-        fi
-        if [ "$var" = "--genus" ]; then
-        RANK=1
-        break
-        fi
-        if [ "$var" = "--family" ]; then
-        RANK=2
-        break
-        fi
-        if [ "$var" = "--order" ]; then
-        RANK=3
-        break
-        fi
-        if [ "$var" = "--class" ]; then
-        RANK=4
-        break
-        fi
-        if [ "$var" = "--phylum" ]; then
-        RANK=5
-        break
-        fi
-	PREF=`echo $var | cut -c1-2`
-        if [ "$PREF" = "--" ]; then
-		echo "Failed to recognize this parameter: $var"
-		exit 
-	fi
+for arg in "$@"; do
+	case "$arg" in
+		--species|--genus|--family|--order|--class|--phylum)
+			RANK="$(rank_value "$arg")"
+			;;
+		--*)
+			die "unrecognized taxonomy rank '$arg'"
+			;;
+		*)
+			DATABASES+=("$arg")
+			;;
+	esac
 done
 
-if [ -f $DBDR/targets.txt ]; then
-	rm -f $DBDR/targets.txt
-fi
+[ "${#DATABASES[@]}" -gt 0 ] || die "choose at least one database"
 
-touch $DBDR/targets.txt
-rm -f $DBDR/.tmp $LDIR/.settings $LDIR/files_excluded.txt $DBDR/files_excluded.txt
+LDIR="${CLARK_HOME:-$(script_dir)}"
+mkdir -p "$DBDR"
+
+echo "$DBDR" > "$LDIR/.DBDirectory"
+: > "$DBDR/targets.txt"
+rm -f "$DBDR/.tmp" "$LDIR/.settings" "$LDIR/files_excluded.txt" "$DBDR/files_excluded.txt"
+
 subDB=""
-us="_"
-for db in $@
-do
-	if [ "$db" != "$DBDR" ]; then
-		PRE=`echo $db | cut -c1-2`
-		if [ "$PRE" != "--" ]; then
+for db in "${DATABASES[@]}"; do
+	echo -n "Collecting metadata of $db... "
+	"$LDIR/make_metadata.sh" "$db" "$DBDR"
+	[ -s "$DBDR/.$db" ] || die "metadata list for '$db' was not created"
+	[ -f "$DBDR/.taxondata" ] || die "taxonomy data is missing in '$DBDR'"
+	echo "done."
 
-			echo -n "Collecting metadata of $db... "
-			$LDIR/make_metadata.sh $db $DBDR
-			if [ ! -s $DBDR/.$db ]; then
-				exit
-			fi
-			if [ ! -f $DBDR/.taxondata ]; then
-				exit
-			fi
-			echo "done."
-			if [ -s $DBDR/.$db.fileToTaxIDs ]; then 
-				$LDIR/exe/getTargetsDef $DBDR/.$db.fileToTaxIDs $RANK >> $DBDR/targets.txt 
-				subDB="$subDB$db$us"
-				if [ -f $LDIR/files_excluded.txt ]; then
-					cat $LDIR/files_excluded.txt >> $DBDR/.tmp
-					rm $LDIR/files_excluded.txt
-				fi
-			fi
+	if [ -s "$DBDR/.$db.fileToTaxIDs" ]; then
+		"$LDIR/exe/getTargetsDef" "$DBDR/.$db.fileToTaxIDs" "$RANK" >> "$DBDR/targets.txt"
+		subDB="${subDB}${db}_"
+		if [ -f "$LDIR/files_excluded.txt" ]; then
+			cat "$LDIR/files_excluded.txt" >> "$DBDR/.tmp"
+			rm -f "$LDIR/files_excluded.txt"
 		fi
 	fi
 done
 
-subDB="$subDB$RANK"
-echo "-T $DBDR/targets.txt" > $LDIR/.settings
-if [ ! -d $DBDR/$subDB ]; then
+[ -s "$DBDR/targets.txt" ] || die "no targets were generated"
+
+subDB="${subDB}${RANK}"
+{
+	printf -- '-T %s\n' "$DBDR/targets.txt"
+	printf -- '-D %s\n' "$DBDR/$subDB/"
+} > "$LDIR/.settings"
+
+if [ ! -d "$DBDR/$subDB" ]; then
 	echo "Creating directory to store discriminative k-mers: $DBDR/$subDB"
-	mkdir -m 775 $DBDR/$subDB
+	mkdir -p "$DBDR/$subDB"
 fi
-echo "-D $DBDR/$subDB/" >> $LDIR/.settings
-if [ -s $DBDR/.tmp ]; then
-	mv $DBDR/.tmp $DBDR/files_excluded.txt
+
+if [ -s "$DBDR/.tmp" ]; then
+	mv "$DBDR/.tmp" "$DBDR/files_excluded.txt"
 fi
-echo "$DBDR/$subDB" > $LDIR/.dbAddress
+
+echo "$DBDR/$subDB" > "$LDIR/.dbAddress"
+echo "Targets configured in $DBDR/targets.txt"

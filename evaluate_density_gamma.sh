@@ -22,8 +22,7 @@
 #                               per Gamma score in one or several results files.
 #
 
-FSCRPT=$(readlink -f "$0")
-LDIR=$(dirname "$FSCRPT")
+LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
 
 if [ $# -lt 1 ]; then
 
