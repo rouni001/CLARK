@@ -41,7 +41,8 @@ test_shell_syntax() {
 		"$REPO_DIR/classify_metagenome.sh" \
 		"$REPO_DIR/set_targets.sh" \
 		"$REPO_DIR/make_metadata.sh" \
-		"$REPO_DIR/download_taxondata.sh"; do
+		"$REPO_DIR/download_taxondata.sh" \
+		"$REPO_DIR/tests/coverage_report.sh"; do
 		bash -n "$script"
 	done
 	pass "modern shell entrypoints parse"
@@ -256,6 +257,222 @@ test_get_targets_def_smoke() {
 	pass "getTargetsDef helper emits expected target definitions"
 }
 
+test_get_accssn_taxid_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-accession-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	files="$tmp/files.txt"
+	accessions="$tmp/nucl_accession2taxid"
+	merged="$tmp/merged.dmp"
+	ref_a="$tmp/refA.fa"
+	ref_b="$tmp/refB.fa"
+	out="$tmp/file_taxid.txt"
+
+	printf '>NC_000001.1 synthetic reference A\nACGT\n' > "$ref_a"
+	printf '>NC_000002.1 synthetic reference B\nTGCA\n' > "$ref_b"
+	printf '%s\n%s\n' "$ref_a" "$ref_b" > "$files"
+	printf 'NC_000001\tNC_000001.1\t111\t111\n' > "$accessions"
+	printf '111 | 211 |\n' > "$merged"
+
+	"$REPO_DIR/exe/getAccssnTaxID" "$files" "$accessions" "$merged" > "$out" 2> "$tmp/stderr"
+
+	grep -Fq "$ref_a	NC_000001	211" "$out" || fail "getAccssnTaxID did not map and merge refA taxid"
+	grep -Fq "$ref_b	NC_000002	-1" "$out" || fail "getAccssnTaxID did not report unmapped refB"
+	pass "getAccssnTaxID maps accession IDs for tiny FASTA inputs"
+}
+
+test_getfiles_to_taxnodes_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-lineage-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	nodes="$tmp/nodes.dmp"
+	file_taxid="$tmp/file_taxid.txt"
+	out="$tmp/fileToTaxIDs.txt"
+
+	cat > "$nodes" <<'EOF'
+1 | 1 | root |
+60 | 1 | phylum |
+50 | 60 | class |
+40 | 50 | order |
+30 | 40 | family |
+20 | 30 | genus |
+10 | 20 | species |
+EOF
+	printf '%s\t%s\t%s\n' "$tmp/refA.fa" "NC_000001" "10" > "$file_taxid"
+
+	"$REPO_DIR/exe/getfilesToTaxNodes" "$nodes" "$file_taxid" > "$out" 2> "$tmp/stderr"
+
+	grep -Fq "$tmp/refA.fa	10	10	20	30	40	50	UNKNOWN" "$out" || fail "getfilesToTaxNodes did not emit expected lineage"
+	pass "getfilesToTaxNodes expands a synthetic taxonomy lineage"
+}
+
+test_exe_seq_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-exeseq-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	multifasta="$tmp/multi.fa"
+	outdir="$tmp/split"
+	mkdir -p "$outdir"
+	cat > "$multifasta" <<'EOF'
+>seqA
+ACGT
+>seqB
+TGCA
+EOF
+
+	"$REPO_DIR/exe/exeSeq" "$multifasta" "$outdir" > "$tmp/stdout" 2> "$tmp/stderr"
+
+	[ "$(find "$outdir" -type f -name '*.fa' | wc -l | tr -d ' ')" = "2" ] || fail "exeSeq did not split two FASTA records"
+	grep -R -Fq "ACGT" "$outdir" || fail "exeSeq output does not contain seqA bases"
+	grep -R -Fq "TGCA" "$outdir" || fail "exeSeq output does not contain seqB bases"
+	pass "exeSeq splits a multi-FASTA file"
+}
+
+test_dscript_maker_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-dscript-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	assembly="$tmp/assembly_summary.txt"
+	out="$tmp/download.sh"
+	printf 'https://example.org/refseq/GCF_000001405.40\n' > "$assembly"
+
+	"$REPO_DIR/exe/dscriptMaker" "$assembly" > "$out"
+
+	grep -Fq "wget https://example.org/refseq/GCF_000001405.40/GCF_000001405.40_genomic.fna.gz" "$out" || fail "dscriptMaker did not emit expected download command"
+	pass "dscriptMaker emits a deterministic download command"
+}
+
+test_density_helpers_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-density-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	result="$tmp/results.csv"
+	gamma_out="$tmp/gamma.txt"
+	conf_out="$tmp/confidence.txt"
+	cat > "$result" <<'EOF'
+Object_ID,Length,Gamma,1st_assignment,score1,2nd_assignment,score2,confidence
+read1,100,0.50,111,9,222,3,0.80
+read2,100,1.20,111,8,222,4,1.00
+EOF
+
+	"$REPO_DIR/exe/getGammaDensity" "$result" > "$gamma_out" 2> "$tmp/gamma.err"
+	"$REPO_DIR/exe/getConfidenceDensity" "$result" > "$conf_out" 2> "$tmp/conf.err"
+
+	grep -Fq "assignments with Gamma score found" "$tmp/gamma.err" || fail "getGammaDensity did not process gamma scores"
+	grep -Fq "[>=1]" "$gamma_out" || fail "getGammaDensity did not report the >=1 gamma bucket"
+	grep -Fq "assignments with confidence score found" "$tmp/conf.err" || fail "getConfidenceDensity did not process confidence scores"
+	grep -Fq "[4.00,4.02[" "$conf_out" && fail "getConfidenceDensity emitted an impossible interval"
+	grep -Fq "Interval" "$conf_out" || fail "getConfidenceDensity did not emit a density table"
+	pass "density helpers summarize synthetic CLARK scores"
+}
+
+test_extract_seqs_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-extract-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	reads="$tmp/reads.fq"
+	results="$tmp/results.csv"
+	out_prefix="$tmp/extracted"
+	cat > "$reads" <<'EOF'
+@read1
+ACGT
++
+!!!!
+@read2
+TGCA
++
+!!!!
+EOF
+	cat > "$results" <<'EOF'
+Object_ID,Length,Assignment
+read1,4,111
+read2,4,222
+EOF
+
+	"$REPO_DIR/exe/extractSeqs" 111 "$reads" "$results" "$out_prefix" 0 0 > "$tmp/stdout" 2> "$tmp/stderr"
+
+	grep -Fq "@read1" "$out_prefix.fq" || fail "extractSeqs did not extract the matching read"
+	if grep -Fq "@read2" "$out_prefix.fq"; then
+		fail "extractSeqs extracted a read assigned to a different taxid"
+	fi
+	pass "extractSeqs extracts matching FASTQ records"
+}
+
+test_get_abundance_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-abundance-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	results="$tmp/results.csv"
+	out="$tmp/abundance.csv"
+	cat > "$results" <<'EOF'
+Object_ID,Length,Assignment
+read1,4,111
+read2,4,111
+read3,4,NA
+EOF
+
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/getAbundance" -F "$results" > "$out"
+	)
+
+	grep -Fq "Name,TargetID,Count,Proportion_All(%),Proportion_Classified(%)" "$out" || fail "getAbundance did not emit expected header"
+	grep -Fq "111,111,2," "$out" || fail "getAbundance did not count assigned reads"
+	grep -Fq "UNKNOWN,UNKNOWN,1," "$out" || fail "getAbundance did not count unassigned reads"
+	pass "getAbundance summarizes a tiny assignment file"
+}
+
+test_make_summary_tables_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-summary-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	report_a="$tmp/sampleA.csv"
+	report_b="$tmp/sampleB.csv"
+	cat > "$report_a" <<'EOF'
+Name,TaxID,Count,Proportion_All(%),Proportion_Classified(%)
+TaxonA,111,3,75,100
+UNKNOWN,UNKNOWN,1,25,-
+EOF
+	cat > "$report_b" <<'EOF'
+Name,TaxID,Count,Proportion_All(%),Proportion_Classified(%)
+TaxonB,222,2,50,100
+UNKNOWN,UNKNOWN,2,50,-
+EOF
+
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/makeSummaryTables" 2 0 "$report_a" "$report_b" > stdout 2> stderr
+	)
+
+	grep -Fq "sampleA" "$tmp/TableSummary_per_Report.csv" || fail "makeSummaryTables did not include sampleA"
+	grep -Fq "TaxonA" "$tmp/TableSummary_HitCount.csv" || fail "makeSummaryTables did not include TaxonA"
+	grep -Fq "TaxonB" "$tmp/TableSummary_HitCount.csv" || fail "makeSummaryTables did not include TaxonB"
+	pass "makeSummaryTables writes summary tables for tiny reports"
+}
+
+test_target_specific_kmers_stat_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-kmer-stat-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	settings="$tmp/settings"
+	targets="$tmp/targets.txt"
+	dbdir="$tmp/db"
+	label_file="$dbdir/db_central_k3_t2_s1610612741_m0.tsk.lb"
+	mkdir -p "$dbdir"
+	printf '%s\t%s\n%s\t%s\n' "$tmp/refA.fa" "111" "$tmp/refB.fa" "222" > "$targets"
+	printf -- '-T %s\n-D %s\n' "$targets" "$dbdir" > "$settings"
+	printf '\000\000\001\000\001\000' > "$label_file"
+
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/getTargetSpecificKmersStat" "$settings" 3 0 > stdout 2> stderr
+	)
+
+	grep -Fq "111,1," "$tmp/targets.distribution.csv" || fail "getTargetSpecificKmersStat did not count target 111"
+	grep -Fq "222,2," "$tmp/targets.distribution.csv" || fail "getTargetSpecificKmersStat did not count target 222"
+	pass "getTargetSpecificKmersStat counts labels in a tiny database"
+}
+
 test_clark_l_label_bug_regression() {
 	block="$(awk '
 		/for\(size_t t = 0 ; t < m_labels.size\(\); t\+\+\)/ { capture=1 }
@@ -293,6 +510,15 @@ test_classify_wrapper_gzip
 test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
 test_get_targets_def_smoke
+test_get_accssn_taxid_smoke
+test_getfiles_to_taxnodes_smoke
+test_exe_seq_smoke
+test_dscript_maker_smoke
+test_density_helpers_smoke
+test_extract_seqs_smoke
+test_get_abundance_smoke
+test_make_summary_tables_smoke
+test_target_specific_kmers_stat_smoke
 test_clark_l_label_bug_regression
 test_ncbi_urls
 test_portable_script_paths

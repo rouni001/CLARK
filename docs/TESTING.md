@@ -10,9 +10,16 @@ Run:
 make test
 ```
 
+To run a clean coverage-instrumented build and enforce the minimum coverage
+gate:
+
+```sh
+make coverage
+```
+
 ## Current Coverage
 
-The suite currently verifies:
+The suite currently contains 20 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
@@ -23,23 +30,46 @@ The suite currently verifies:
 - `--light` selects `CLARK-l`
 - conflicting `--light` and `--spaced` options are rejected
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
+- `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
+- `getfilesToTaxNodes` expands a tiny taxonomy lineage
+- `exeSeq` splits a multi-FASTA file
+- `dscriptMaker` emits deterministic download commands
+- `getGammaDensity` and `getConfidenceDensity` summarize CLARK score columns
+- `extractSeqs` extracts matching FASTQ records from a CLARK result file
+- `getAbundance` summarizes a tiny assignment file
+- `makeSummaryTables` writes summary tables for tiny abundance reports
+- `getTargetSpecificKmersStat` counts target labels in a tiny database fixture
 - the CLARK-l target filename regression stays fixed
 - NCBI download URLs use the HTTPS host
 - shell scripts avoid non-portable `readlink -f`
 
+`make coverage` measures line coverage for compiled CLARK C++ sources with
+`gcov`. It excludes system headers and merges the generated `build/default`,
+`build/light`, and `build/spaced` copies back to their original `src/` paths so
+shared lines are counted once.
+
+Current coverage from `make coverage`:
+
+- covered executable C++ lines: 908
+- total executable C++ lines: 5,657
+- line coverage: 16.05%
+- required minimum: 10.00%
+
 ## Coverage Limitations
 
-The suite does not yet measure line or branch coverage. More importantly, it
-does not yet exercise the core k-mer database build and classification paths
-against biological fixtures. The current C++ coverage is smoke-level: CLI
-startup/version paths and one helper utility are tested, but the classifier
-algorithm is not validated end-to-end.
+The suite still does not measure shell line coverage; shell entrypoints are
+validated through behavioral regression tests instead. More importantly, it does
+not yet exercise the core k-mer database build and classification paths against
+biological fixtures. The current C++ coverage is stronger for helper utilities
+than for the core classifier algorithm.
 
 ## Recommended Next Tests
 
 - small custom-database end-to-end tests for `CLARK`, `CLARK-l`, and `CLARK-S`
 - golden FASTA/FASTQ fixtures with expected assignments
-- abundance-estimation tests with known CSV inputs
+- tests for abundance estimation with taxonomy names, Krona output, and MPA
+  output
 - downloader tests using mocked NCBI manifests instead of live network calls
-- optional instrumented coverage target once compiler/tooling support is
-  standardized across Linux and macOS
+- converter tests for tiny contiguous-to-spaced k-mer databases
+- continued replacement of fixed-size buffers and `sprintf` usage, followed by
+  negative-path tests for long filenames and malformed input

@@ -41,7 +41,7 @@ HELPERS := \
 
 VARIANTS := $(EXE_DIR)/CLARK $(EXE_DIR)/CLARK-l $(EXE_DIR)/CLARK-S
 
-.PHONY: all helpers variants clean test openmp-status
+.PHONY: all helpers variants clean test coverage openmp-status
 
 all: openmp-status helpers variants
 
@@ -133,6 +133,9 @@ $(EXE_DIR)/CLARK-S: $(BUILD_DIR)/spaced/.prepared | $(EXE_DIR)
 
 test: all
 	tests/run_tests.sh
+
+coverage:
+	tests/coverage_report.sh
 
 clean:
 	rm -rf "$(BUILD_DIR)" "$(EXE_DIR)"
