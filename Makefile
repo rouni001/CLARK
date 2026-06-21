@@ -40,14 +40,17 @@ HELPERS := \
 	$(EXE_DIR)/extractSeqs
 
 VARIANTS := $(EXE_DIR)/CLARK $(EXE_DIR)/CLARK-l $(EXE_DIR)/CLARK-S
+UNIT_TESTS := $(EXE_DIR)/unit_file_hash_tests
 
-.PHONY: all helpers variants clean test coverage openmp-status
+.PHONY: all helpers variants unit-tests clean test coverage openmp-status
 
 all: openmp-status helpers variants
 
 helpers: $(HELPERS)
 
 variants: $(VARIANTS)
+
+unit-tests: $(UNIT_TESTS)
 
 openmp-status:
 	@if [ "$(OPENMP_FLAGS)" = "-fopenmp" ]; then \
@@ -98,6 +101,9 @@ $(EXE_DIR)/getTargetSpecificKmersStat: src/file.cc src/getTargetSpecificKmersSta
 $(EXE_DIR)/extractSeqs: src/file.cc src/extractSequences.cc | $(EXE_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o "$@" $^ $(LDFLAGS)
 
+$(EXE_DIR)/unit_file_hash_tests: tests/unit_file_hash_tests.cc src/file.cc src/file.hh src/HashTop.hh src/dataType.hh src/parameters.hh | $(EXE_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I. -o "$@" tests/unit_file_hash_tests.cc src/file.cc $(LDFLAGS)
+
 $(BUILD_DIR)/default/.prepared: src/*.cc src/*.hh src/parameters.hh | $(BUILD_DIR)
 	rm -rf "$(BUILD_DIR)/default"
 	mkdir -p "$(BUILD_DIR)/default"
@@ -131,7 +137,7 @@ $(EXE_DIR)/CLARK-l: $(BUILD_DIR)/light/.prepared | $(EXE_DIR)
 $(EXE_DIR)/CLARK-S: $(BUILD_DIR)/spaced/.prepared | $(EXE_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPENMP_FLAGS) -o "$@" $(BUILD_DIR)/spaced/*.cc $(LDFLAGS) $(OPENMP_FLAGS)
 
-test: all
+test: all unit-tests
 	tests/run_tests.sh
 
 coverage:

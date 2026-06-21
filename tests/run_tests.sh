@@ -79,6 +79,14 @@ test_version_binaries() {
 	pass "CLARK variant version executables run"
 }
 
+test_file_hash_unit_binary() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-file-hash-unit-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	[ -x "$REPO_DIR/exe/unit_file_hash_tests" ] || fail "missing executable exe/unit_file_hash_tests"
+	"$REPO_DIR/exe/unit_file_hash_tests" "$tmp"
+}
+
 test_kso_requires_spectrum_mode() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-kso-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -704,6 +712,7 @@ test_shell_syntax
 test_no_root_shell_scripts
 test_required_executables
 test_version_binaries
+test_file_hash_unit_binary
 test_kso_requires_spectrum_mode
 test_classify_wrapper_quotes_paths
 test_classify_wrapper_gzip
