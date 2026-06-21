@@ -24,6 +24,12 @@
 
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
+if [ ! -s "$LDIR/.DBDirectory" ]; then
+	echo "Error: no CLARK database directory is configured." >&2
+	echo "Run scripts/set_targets.sh first to select or create a database directory." >&2
+	exit 1
+fi
+
 while IFS= read -r DIR || [ -n "$DIR" ]
 do
 [ -n "$DIR" ] || continue

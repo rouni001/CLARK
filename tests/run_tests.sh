@@ -313,6 +313,23 @@ test_set_targets_records_absolute_db_paths() {
 	pass "set_targets records absolute database paths from another working directory"
 }
 
+test_update_taxonomy_requires_db_directory() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-update-taxonomy-state-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	err="$tmp/update-taxonomy.err"
+
+	mkdir -p "$fake_home"
+
+	if CLARK_HOME="$fake_home" "$REPO_DIR/scripts/updateTaxonomy.sh" >/dev/null 2>"$err"; then
+		fail "updateTaxonomy accepted a missing .DBDirectory state file"
+	fi
+
+	grep -Fq "scripts/set_targets.sh" "$err" || fail "updateTaxonomy did not explain how to configure the database directory"
+	pass "updateTaxonomy reports missing database configuration"
+}
+
 test_documentation_script_paths() {
 	if grep -E "\./(buildSpacedDB|classify_metagenome|clean|download_RefSeqDB|download_taxondata|estimate_abundance|evaluate_density_confidence|evaluate_density_gamma|extractSequences|getTargetsKmers_distribution|install|makeSummaryTables|make_metadata|resetCustomDB|set_targets|updateTaxonomy)\.sh|\./scripts/" \
 		"$REPO_DIR/README.md" "$REPO_DIR/README_FULL.md" "$REPO_DIR/docs/QUICKSTART.md" "$REPO_DIR/scripts/README.md" >/dev/null; then
@@ -598,6 +615,7 @@ test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
 test_scripts_directory_entrypoint
 test_set_targets_records_absolute_db_paths
+test_update_taxonomy_requires_db_directory
 test_documentation_script_paths
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
