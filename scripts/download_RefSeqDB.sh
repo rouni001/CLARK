@@ -47,6 +47,7 @@ DRY_RUN=${CLARK_REFSEQ_DRY_RUN:-0}
 THREADS=${CLARK_REFSEQ_THREADS:-8}
 RESUME=${CLARK_REFSEQ_RESUME:-1}
 DOWNLOAD_ATTEMPTS=${CLARK_REFSEQ_DOWNLOAD_ATTEMPTS:-5}
+FIRST_PASS_ATTEMPTS=${CLARK_REFSEQ_FIRST_PASS_ATTEMPTS:-3}
 RETRY_DELAY=${CLARK_REFSEQ_RETRY_DELAY:-2}
 REFSEQ_CATEGORY=${CLARK_REFSEQ_CATEGORY:-all}
 ASSEMBLY_LEVEL=${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}
@@ -99,6 +100,11 @@ case "$DOWNLOAD_ATTEMPTS" in
 	''|*[!0-9]*) die "CLARK_REFSEQ_DOWNLOAD_ATTEMPTS must be a positive integer" ;;
 esac
 [ "$DOWNLOAD_ATTEMPTS" -gt 0 ] || die "CLARK_REFSEQ_DOWNLOAD_ATTEMPTS must be a positive integer"
+
+case "$FIRST_PASS_ATTEMPTS" in
+	''|*[!0-9]*) die "CLARK_REFSEQ_FIRST_PASS_ATTEMPTS must be a positive integer" ;;
+esac
+[ "$FIRST_PASS_ATTEMPTS" -gt 0 ] || die "CLARK_REFSEQ_FIRST_PASS_ATTEMPTS must be a positive integer"
 
 case "$RETRY_DELAY" in
 	''|*[!0-9]*) die "CLARK_REFSEQ_RETRY_DELAY must be a non-negative integer" ;;
@@ -262,6 +268,8 @@ fetch_url_to_status() {
 	url="$1"
 	source="$2"
 	status_file="$3"
+	max_attempts="$4"
+	failure_status="$5"
 	output=${url##*/}
 
 	if [ -s "$output" ]; then
@@ -283,7 +291,7 @@ fetch_url_to_status() {
 	fi
 
 	attempt=1
-	while [ "$attempt" -le "$DOWNLOAD_ATTEMPTS" ]; do
+	while [ "$attempt" -le "$max_attempts" ]; do
 		if run_sequence_download_once "$url" "$partial"; then
 			:
 		fi
@@ -293,15 +301,15 @@ fetch_url_to_status() {
 			return 0
 		fi
 		rm -f "$partial"
-		if [ "$attempt" -lt "$DOWNLOAD_ATTEMPTS" ] && [ "$RETRY_DELAY" -gt 0 ]; then
+		if [ "$attempt" -lt "$max_attempts" ] && [ "$RETRY_DELAY" -gt 0 ]; then
 			sleep $((RETRY_DELAY * attempt))
 		fi
 		attempt=$((attempt + 1))
 	done
 
-	echo "Failed to download $url after $DOWNLOAD_ATTEMPTS attempt(s)" >&2
 	rm -f "$partial"
-	return 1
+	record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "$failure_status"
+	return 0
 }
 
 download_assembly_source() {
@@ -407,15 +415,16 @@ validate_download_list() {
 }
 
 report_download_progress() {
-	completed="$1"
-	total="$2"
+	label="$1"
+	completed="$2"
+	total="$3"
 	if [ "$total" -eq 0 ]; then
-		message="RefSeq download progress: 0/0 files complete (100%)."
+		message="$label: 0/0 files complete (100%)."
 		if [ -t 1 ]; then printf '\r%s\n' "$message"; else echo "$message"; fi
 		return 0
 	fi
 	percent=$((completed * 100 / total))
-	message="RefSeq download progress: $completed/$total files complete ($percent%)."
+	message="$label: $completed/$total files complete ($percent%)."
 	if [ -t 1 ]; then
 		if [ "$completed" -ge "$total" ]; then
 			printf '\r%s\n' "$message"
@@ -425,6 +434,70 @@ report_download_progress() {
 	else
 		echo "$message"
 	fi
+}
+
+run_download_pass() {
+	list_file="$1"
+	status_prefix="$2"
+	max_attempts="$3"
+	failure_status="$4"
+	progress_label="$5"
+	total=$(wc -l < "$list_file" | tr -d ' ')
+
+	[ "$total" -gt 0 ] || return 0
+
+	job_count=0
+	job_index=0
+	completed=0
+	progress_step=$((total / 100))
+	[ "$progress_step" -gt 0 ] || progress_step=1
+	[ "$progress_step" -le 100 ] || progress_step=100
+	next_report="$progress_step"
+	report_download_progress "$progress_label" 0 "$total"
+	while IFS='	' read -r source genome_url || [ -n "$genome_url" ]; do
+		[ -n "$genome_url" ] || continue
+		job_index=$((job_index + 1))
+		fetch_url_to_status "$genome_url" "$source" "$status_dir/$status_prefix.$job_index.status.tsv" "$max_attempts" "$failure_status" &
+		job_count=$((job_count + 1))
+		if [ "$job_count" -ge "$THREADS" ]; then
+			wait
+			completed=$((completed + job_count))
+			if [ -t 1 ] || [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
+				report_download_progress "$progress_label" "$completed" "$total"
+				while [ "$next_report" -le "$completed" ]; do
+					next_report=$((next_report + progress_step))
+				done
+			fi
+			job_count=0
+		fi
+	done < "$list_file"
+	if [ "$job_count" -gt 0 ]; then
+		wait
+		completed=$((completed + job_count))
+		report_download_progress "$progress_label" "$completed" "$total"
+	fi
+}
+
+collect_deferred_downloads() {
+	find "$status_dir" -type f -name 'initial.*.status.tsv' -exec awk -F '\t' '
+		$7 == "deferred" { print $4 "\t" $5 }
+	' {} + > "$retry_list"
+}
+
+report_remaining_failures() {
+	find "$status_dir" -type f -name '*.status.tsv' -exec awk -F '\t' '
+		$7 == "failed" { print $4 "\t" $5 }
+	' {} + > "$failed_list"
+	[ -s "$failed_list" ] || return 0
+
+	failed_count=$(wc -l < "$failed_list" | tr -d ' ')
+	echo "Failed to download $failed_count RefSeq genome file(s) after deferred retries." >&2
+	echo "First failed URLs:" >&2
+	sed -n '1,20p' "$failed_list" | while IFS='	' read -r failed_source failed_url || [ -n "$failed_url" ]; do
+		[ -n "$failed_url" ] || continue
+		echo "  [$failed_source] $failed_url" >&2
+	done
+	die "RefSeq download incomplete; rerun the same command to resume and retry failed files"
 }
 
 download_url_list() {
@@ -443,40 +516,21 @@ download_url_list() {
 	status_dir="$DBDR/.$DB.download-status.$$"
 	rm -rf "$status_dir"
 	mkdir -p "$status_dir"
-	job_count=0
-	job_index=0
-	completed=0
-	progress_step=$((total / 100))
-	[ "$progress_step" -gt 0 ] || progress_step=1
-	[ "$progress_step" -le 100 ] || progress_step=100
-	next_report="$progress_step"
-	report_download_progress 0 "$total"
-	while IFS='	' read -r source genome_url || [ -n "$genome_url" ]; do
-		[ -n "$genome_url" ] || continue
-		job_index=$((job_index + 1))
-		fetch_url_to_status "$genome_url" "$source" "$status_dir/$job_index.tsv" &
-		job_count=$((job_count + 1))
-		if [ "$job_count" -ge "$THREADS" ]; then
-			wait || die "failed to download one or more RefSeq genomes"
-			completed=$((completed + job_count))
-			if [ -t 1 ] || [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
-				report_download_progress "$completed" "$total"
-				while [ "$next_report" -le "$completed" ]; do
-					next_report=$((next_report + progress_step))
-				done
-			fi
-			job_count=0
-		fi
-	done < "$DOWNLOAD_LIST"
-	if [ "$job_count" -gt 0 ]; then
-		wait || die "failed to download one or more RefSeq genomes"
-		completed=$((completed + job_count))
-		report_download_progress "$completed" "$total"
+	retry_list="$status_dir/deferred.urls.tsv"
+	failed_list="$status_dir/failed.urls.tsv"
+
+	run_download_pass "$DOWNLOAD_LIST" initial "$FIRST_PASS_ATTEMPTS" deferred "RefSeq download progress"
+	collect_deferred_downloads
+	if [ -s "$retry_list" ]; then
+		deferred_count=$(wc -l < "$retry_list" | tr -d ' ')
+		echo "Retrying $deferred_count deferred RefSeq download(s) after the first pass."
+		run_download_pass "$retry_list" retry "$DOWNLOAD_ATTEMPTS" failed "RefSeq deferred retry progress"
 	fi
 
 	if [ -n "$(find "$status_dir" -type f -print -quit)" ]; then
-		find "$status_dir" -type f -name '*.tsv' -exec cat {} + >> "$MANIFEST"
+		find "$status_dir" -type f -name '*.status.tsv' -exec cat {} + >> "$MANIFEST"
 	fi
+	report_remaining_failures
 	rm -rf "$status_dir"
 }
 

@@ -744,6 +744,151 @@ STUB
 	pass "RefSeq downloader retries transient parallel failures and finalizes archives"
 }
 
+test_refseq_downloader_defers_retry_until_after_first_pass() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-deferred-retry-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	state="$tmp/state"
+	mkdir -p "$bindir" "$state"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet|-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			for i in 1 2 3 4 5; do
+				printf 'GCF_300000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tDeferred virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tDeferred%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_300000%03d.1_Deferred%d/\n' "$i" "$i" "$i" "$i" "$i"
+			done
+		} > "$out"
+		;;
+	*_genomic.fna.gz)
+		base="${url##*/}"
+		case "$base" in
+			GCF_300000001.1_Deferred1_genomic.fna.gz)
+				if [ ! -d "$CLARK_TEST_STATE/first-pass-finished" ]; then
+					printf 'temporary NCBI outage for %s\n' "$base" > "$out"
+					exit 1
+				fi
+				;;
+			GCF_300000005.1_Deferred5_genomic.fna.gz)
+				mkdir "$CLARK_TEST_STATE/first-pass-finished" 2>/dev/null || true
+				;;
+		esac
+		printf '>deferred-virus\nACGT\n' | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_STATE="$state" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+	CLARK_REFSEQ_RETRY_DELAY=0 \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 1 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
+
+	grep -Fq "Retrying 1 deferred RefSeq download(s)" "$tmp/stdout" ||
+		fail "RefSeq downloader did not defer failed URLs for a later retry pass"
+	count=$(find "$dbdir/Viruses" -type f -name '*.fna' | wc -l | tr -d ' ')
+	[ "$count" = "5" ] || fail "RefSeq downloader did not complete all files after deferred retry"
+	grep -Fq "deferred" "$dbdir/.viruses.download_manifest.tsv" ||
+		fail "RefSeq downloader did not record the deferred first-pass status"
+	grep -Fq "GCF_300000001.1_Deferred1_genomic.fna" "$dbdir/.viruses" ||
+		fail "RefSeq downloader did not list the deferred and later downloaded FASTA"
+	pass "RefSeq downloader retries deferred URLs after the first pass"
+}
+
+test_refseq_downloader_fails_when_deferred_downloads_remain() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-permanent-failure-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet|-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			for i in 1 2 3 4; do
+				printf 'GCF_400000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tFailure virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tFailure%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_400000%03d.1_Failure%d/\n' "$i" "$i" "$i" "$i" "$i"
+			done
+		} > "$out"
+		;;
+	*GCF_400000002.1_Failure2_genomic.fna.gz)
+		printf 'permanent transfer failure\n' > "$out"
+		exit 1
+		;;
+	*_genomic.fna.gz)
+		printf '>failure-virus\nACGT\n' | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+
+	if PATH="$bindir:$PATH" \
+		CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		CLARK_REFSEQ_RETRY_DELAY=0 \
+			"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 4 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"; then
+		fail "RefSeq downloader reported success despite a permanent deferred failure"
+	fi
+
+	grep -Fq "Failed to download 1 RefSeq genome file(s) after deferred retries" "$tmp/stderr" ||
+		fail "RefSeq downloader did not summarize permanent deferred failures"
+	[ ! -e "$dbdir/.viruses" ] || fail "RefSeq downloader wrote a success marker after an incomplete download"
+	grep -Fq "failed" "$dbdir/.viruses.download_manifest.tsv" ||
+		fail "RefSeq downloader did not record failed final status in the manifest"
+	pass "RefSeq downloader fails loudly when deferred downloads remain incomplete"
+}
+
 test_refseq_downloader_reports_early_parallel_progress() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-progress-refresh-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1357,6 +1502,8 @@ test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
 test_refseq_downloader_rejects_malformed_urls_before_download
 test_refseq_downloader_quiet_aggregate_progress
 test_refseq_downloader_retries_parallel_transient_failures
+test_refseq_downloader_defers_retry_until_after_first_pass
+test_refseq_downloader_fails_when_deferred_downloads_remain
 test_refseq_downloader_reports_early_parallel_progress
 test_refseq_downloader_success_matrix
 test_refseq_downloader_filters_and_resumes
