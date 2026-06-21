@@ -59,6 +59,12 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
+### Version 1.4.5 (June 21, 2026)
+- Replaced RefSeq sequence transfers with a Python 3 standard-library downloader.
+- Added bounded parallel downloads, resumable `.part` files, gzip validation, deferred retry, aggregate progress, and failure reports.
+- Preserved existing RefSeq selection and provenance behavior for supported database categories.
+- Added regression tests for successful downloads, transient failures, deferred retries, permanent failures, resume behavior, and supported database categories.
+
 ### Version 1.4.4 (June 21, 2026)
 - Improved large RefSeq database setup, especially for bacteria, with parallel resumable downloads by default.
 - Added RefSeq category and assembly-level filters for smaller exploratory databases.

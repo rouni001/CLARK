@@ -1,3 +1,8 @@
+06/21/2026  Version 1.4.5.0-a:
+		Replaced the RefSeq sequence-transfer loop with a Python 3 standard-library downloader.
+		Added bounded parallel downloads, resumable .part files, gzip validation, deferred retry, aggregate progress, and failure reports.
+		Preserved existing RefSeq selection and provenance behavior for bacteria, viruses, plasmid, plastid, protozoa, and related databases.
+		Added regression tests for successful downloads, transient failures, deferred retries, permanent failures, resume behavior, and supported database categories.
 06/21/2026  Version 1.4.4.0-a:
 		Improved RefSeq database setup for large downloads, especially bacteria.
 		RefSeq downloads now use parallel resumable transfers by default and support filters for smaller exploratory databases.
