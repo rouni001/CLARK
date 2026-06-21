@@ -75,6 +75,38 @@ void printUsage()
 	return;
 }
 
+template <typename HKMERr>
+void runClassifier(const size_t& k,
+		const char* targets,
+		const char* folder,
+		const size_t& w,
+		const std::vector<std::string>& DSS,
+		const ITYPE& minT,
+		const bool& tsk,
+		const bool& cLightDB,
+		const bool& spacedK,
+		const size_t& iterKmers,
+		const size_t& cpu,
+		const ITYPE& sfactor,
+		const bool& longR,
+		const bool& ldm,
+		const char* objects,
+		const char* objects2,
+		const char* results,
+		const bool& paired,
+		const size_t& mode,
+		const ITYPE& minO,
+		const bool& kso,
+		const bool& ext)
+{
+	CLARK<HKMERr> classifier(k, targets, folder, w, DSS, minT, tsk, cLightDB, spacedK, iterKmers, cpu, sfactor, longR, ldm);
+	if (paired)
+	{	classifier.run(objects, objects2, results, mode, minO, kso, ext, true);	}
+	else
+	{	classifier.run(objects, results, mode, minO, kso, ext, true);	}
+	exit(0);
+}
+
 int main(int argc, char** argv)
 {
 	if (argc == 2)
@@ -97,7 +129,7 @@ int main(int argc, char** argv)
 	}
 	size_t	k 		= LENGTH, w = 0, mode = 1, cpu = 1, iterKmers = 0;
 	ITYPE minT 		= 0, minO = 0, sfactor = 0;
-	bool cLightDB 		= false, spacedK = false, ldm = false, tsk = false, kso= false, ext = false, isReduced = false, longR =  false;
+	bool cLightDB 		= false, spacedK = false, ldm = false, tsk = false, kso= false, ext = false, longR =  false;
 	int i_targets	 	= -1, i_objects = -1, i_objects2 = -1, i_folder=-1, i_results =-1;
 	std::vector<std::string> DSS;
 
@@ -136,7 +168,6 @@ int main(int argc, char** argv)
 			if (++i >= argc) {cerr << "Please specify the mode!"<< endl; exit(1);    }
 			mode =  atoi(argv[i]);
 			if (mode > 3) {	cerr <<"The mode of execution should be 0 (full), 1 (default), 2 (express) or 3 (colum-based)." << endl; exit(1);}
-			if (mode != 3) {	kso = false;	}
 			continue;
 		}
 		if (val ==   "-n")
@@ -274,35 +305,25 @@ int main(int argc, char** argv)
 	if (w <= max16)
 	{
 		// Use 2Bytes to store each discriminative k-mer
-		CLARK<T16> classifier(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK, iterKmers, cpu, sfactor, longR, ldm);
-		if (paired)
-		{	classifier.run(objects, objects2, argv[i_results], mode, minO, kso, ext, true);	}
-		else
-		{	classifier.run(objects, argv[i_results], mode, minO, kso, ext, true); 	}
-		exit(0);
+		runClassifier<T16>(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK,
+				iterKmers, cpu, sfactor, longR, ldm, objects, objects2, argv[i_results], paired,
+				mode, minO, kso, ext);
 	}
 	if (w <= max32)
 	{
 		// Use 4Bytes to store each discriminative k-mer
-		CLARK<T32> classifier(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK, iterKmers, cpu, sfactor, longR, ldm);
-		if (paired)
-                {       classifier.run(objects, objects2, argv[i_results], mode, minO, kso, ext, true); }
-                else
-                {       classifier.run(objects, argv[i_results], mode, minO, kso, ext, true);   }  
-		exit(0);
+		runClassifier<T32>(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK,
+				iterKmers, cpu, sfactor, longR, ldm, objects, objects2, argv[i_results], paired,
+				mode, minO, kso, ext);
 	}
 	if (w <= MAXK)
 	{
 		// Use 8Bytes to store each discriminative k-mer
-		CLARK<T64> classifier(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK, iterKmers, cpu, sfactor, longR, ldm);
-		if (paired)
-                {       classifier.run(objects, objects2, argv[i_results], mode, minO, kso, ext, true); }
-                else
-                {       classifier.run(objects, argv[i_results], mode, minO, kso, ext, true);   }  
-		exit(0);
+		runClassifier<T64>(k, argv[i_targets], folder.c_str(), w, DSS, minT, tsk, cLightDB, spacedK,
+				iterKmers, cpu, sfactor, longR, ldm, objects, objects2, argv[i_results], paired,
+				mode, minO, kso, ext);
 	}
 	std::cout <<"This version of CLARK does not support k-mer length strictly higher than " << MAXK << std::endl;
 	exit(-1);
 
 }
-

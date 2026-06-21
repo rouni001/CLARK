@@ -79,6 +79,32 @@ test_version_binaries() {
 	pass "CLARK variant version executables run"
 }
 
+test_kso_requires_spectrum_mode() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-kso-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	targets="$tmp/targets.txt"
+	db="$tmp/db"
+	objects="$tmp/objects.fa"
+	result="$tmp/result.csv"
+	output="$tmp/output.txt"
+
+	printf 'target.fa 12345\n' > "$targets"
+	printf '' > "$db"
+	printf '>read1\nACGT\n' > "$objects"
+
+	for binary in CLARK CLARK-l CLARK-S; do
+		for args in "--kso -m 0" "-m 0 --kso"; do
+			if "$REPO_DIR/exe/$binary" $args -T "$targets" -D "$db" -O "$objects" -R "$result" > "$output" 2>&1; then
+				fail "$binary accepted --kso outside spectrum mode with args: $args"
+			fi
+			grep -Fq "option '--kso' is only for the spectrum mode" "$output" ||
+				fail "$binary did not report --kso spectrum-mode validation for args: $args"
+		done
+	done
+	pass "--kso requires spectrum mode regardless of argument order"
+}
+
 create_fake_exe() {
 	local dir="$1"
 	mkdir -p "$dir"
@@ -678,6 +704,7 @@ test_shell_syntax
 test_no_root_shell_scripts
 test_required_executables
 test_version_binaries
+test_kso_requires_spectrum_mode
 test_classify_wrapper_quotes_paths
 test_classify_wrapper_gzip
 test_classify_wrapper_paired_light_variant
