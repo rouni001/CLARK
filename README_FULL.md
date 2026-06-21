@@ -919,15 +919,16 @@ the selected database(s) and also data of the taxonomy tree, from NCBI.
 Once the sequences are found or downloaded in the directory, the script will build 
 the targets for a given taxonomy rank. 
 
-Large RefSeq downloads, especially bacteria, can take a long time. To speed up
-the download step, `scripts/set_targets.sh` accepts RefSeq download options:
+Large RefSeq downloads, especially bacteria, can take a long time. RefSeq
+downloads use 8 parallel workers and resume mode by default. These defaults can
+be overridden if needed:
 ```
-$ scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 8 --resume-downloads
+$ scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 4
 ```
 To build a smaller bacteria database for exploratory work, restrict RefSeq
 assembly summaries to representative or reference genomes:
 ```
-$ scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 8 --resume-downloads --refseq-category representative
+$ scripts/set_targets.sh <DIR_DB/> bacteria --refseq-category representative
 ```
 The default remains all latest complete RefSeq assemblies. For standard RefSeq
 libraries where NCBI assembly summaries provide taxids, CLARK uses that

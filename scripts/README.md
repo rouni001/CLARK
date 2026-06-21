@@ -23,18 +23,18 @@ Before downloading large RefSeq datasets, you can inspect the planned work:
 scripts/download_RefSeqDB.sh --dry-run /path/to/clark-db bacteria
 ```
 
-For large bacteria databases, use parallel and resumable downloads from the
-user-facing setup script:
+RefSeq downloads use 8 parallel workers and resume mode by default. To override
+the worker count, pass `--download-threads` to the user-facing setup script:
 
 ```sh
-scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads
+scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 4
 ```
 
 For faster exploratory databases, restrict RefSeq assembly summaries to
 representative or reference genomes:
 
 ```sh
-scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads --refseq-category representative
+scripts/set_targets.sh /path/to/clark-db bacteria --refseq-category representative
 ```
 
 The downloader writes `.<database>.download_manifest.tsv` and

@@ -391,6 +391,45 @@ STUB
 	pass "set_targets passes RefSeq download options to metadata preparation"
 }
 
+test_set_targets_defaults_to_parallel_resume_downloads() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-set-targets-download-defaults-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir_input="$tmp/db"
+	capture="$tmp/capture.txt"
+	mkdir -p "$fake_home/scripts" "$fake_home/exe" "$dbdir_input"
+
+	cat > "$fake_home/scripts/make_metadata.sh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+db="$1"
+dbdir="$2"
+{
+	printf 'threads=%s\n' "${CLARK_REFSEQ_THREADS:-}"
+	printf 'resume=%s\n' "${CLARK_REFSEQ_RESUME:-}"
+} >> "$CLARK_TEST_CAPTURE"
+printf '%s\n' "$dbdir/ref.fa" > "$dbdir/.$db"
+touch "$dbdir/.taxondata"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$dbdir/ref.fa" "111" "111" "222" "333" "444" "555" "666" > "$dbdir/.$db.fileToTaxIDs"
+STUB
+	cat > "$fake_home/exe/getTargetsDef" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+cat "$1" >/dev/null
+printf 'ref.fa\t111\n'
+STUB
+	chmod +x "$fake_home/scripts/make_metadata.sh" "$fake_home/exe/getTargetsDef"
+
+	CLARK_HOME="$fake_home" \
+	CLARK_TEST_CAPTURE="$capture" \
+		"$REPO_DIR/scripts/set_targets.sh" "$dbdir_input" bacteria >/dev/null
+
+	grep -Fq "threads=8" "$capture" || fail "set_targets does not default RefSeq download threads to 8"
+	grep -Fq "resume=1" "$capture" || fail "set_targets does not default RefSeq resume mode to on"
+	pass "set_targets defaults to parallel resumable RefSeq downloads"
+}
+
 test_update_taxonomy_requires_db_directory() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-update-taxonomy-state-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -438,6 +477,9 @@ test_refseq_downloader_normalizes_ncbi_trailing_slash_paths() {
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+while [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ] || [ "${1:-}" = "-c" ]; do
+	shift
+done
 if [ "$1" = "-O" ]; then
 	out="$2"
 	url="$3"
@@ -495,6 +537,77 @@ test_refseq_downloader_rejects_malformed_urls_before_download() {
 	pass "RefSeq downloader rejects malformed generated URLs before download"
 }
 
+test_refseq_downloader_quiet_aggregate_progress() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-quiet-progress-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	log="$tmp/wget.log"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+quiet=0
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet)
+			quiet=1
+			shift
+			;;
+		-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+printf 'quiet=%s url=%s\n' "$quiet" "$url" >> "$CLARK_TEST_WGET_LOG"
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			for i in 1 2 3 4 5 6 7 8 9 10; do
+				printf 'GCF_000000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMock%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000%03d.1_Mock%d/\n' "$i" "$i" "$i" "$i" "$i"
+			done
+		} > "$out"
+		;;
+	*_genomic.fna.gz)
+		printf '>mock-virus\nACGT\n' | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
+
+	if grep -Fq "quiet=0" "$log"; then
+		fail "RefSeq downloader invoked wget without quiet mode"
+	fi
+	grep -Fq "RefSeq download progress:" "$tmp/stdout" || fail "RefSeq downloader did not report aggregate progress"
+	grep -Fq "10/10" "$tmp/stdout" || fail "RefSeq downloader did not report final aggregate completion"
+	if grep -Eq "Saving to:|HTTP request sent|Resolving |Connecting to " "$tmp/stdout" "$tmp/stderr"; then
+		fail "RefSeq downloader leaked per-file network chatter"
+	fi
+	pass "RefSeq downloader uses quiet network commands and aggregate progress"
+}
+
 test_refseq_downloader_mocked_assembly_summary() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-mocked-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -507,9 +620,9 @@ test_refseq_downloader_mocked_assembly_summary() {
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "${1:-}" = "-c" ]; then
+while [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ] || [ "${1:-}" = "-c" ]; do
 	shift
-fi
+done
 if [ "$1" = "-O" ]; then
 	out="$2"
 	url="$3"
@@ -568,9 +681,9 @@ test_refseq_downloader_filters_and_resumes() {
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "${1:-}" = "-c" ]; then
+while [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ] || [ "${1:-}" = "-c" ]; do
 	shift
-fi
+done
 if [ "$1" = "-O" ]; then
 	out="$2"
 	url="$3"
@@ -1044,10 +1157,12 @@ test_classify_wrapper_rejects_conflicting_variants
 test_scripts_directory_entrypoint
 test_set_targets_records_absolute_db_paths
 test_set_targets_passes_refseq_download_options
+test_set_targets_defaults_to_parallel_resume_downloads
 test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
 test_refseq_downloader_rejects_malformed_urls_before_download
+test_refseq_downloader_quiet_aggregate_progress
 test_refseq_downloader_mocked_assembly_summary
 test_refseq_downloader_filters_and_resumes
 test_make_metadata_uses_refseq_provenance_taxids

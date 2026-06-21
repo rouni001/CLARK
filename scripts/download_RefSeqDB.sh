@@ -30,8 +30,8 @@ Usage: $0 [options] <Directory for the sequences> <Database: bacteria, viruses, 
 
 Options:
   --dry-run                         Plan downloads without fetching sequence files.
-  --threads <N>                     Download up to N sequence files at a time (default: 1).
-  --resume                          Keep existing sequence files and resume partial downloads.
+  --threads <N>                     Download up to N sequence files at a time (default: 8).
+  --resume                          Keep existing sequence files and resume partial downloads (default: on).
   --refseq-category <all|representative|reference>
                                     Filter RefSeq assembly summaries by refseq_category (default: all).
   --assembly-level <level|all>      Filter RefSeq assembly summaries by assembly_level (default: Complete Genome).
@@ -44,8 +44,8 @@ die() {
 }
 
 DRY_RUN=${CLARK_REFSEQ_DRY_RUN:-0}
-THREADS=${CLARK_REFSEQ_THREADS:-1}
-RESUME=${CLARK_REFSEQ_RESUME:-0}
+THREADS=${CLARK_REFSEQ_THREADS:-8}
+RESUME=${CLARK_REFSEQ_RESUME:-1}
 REFSEQ_CATEGORY=${CLARK_REFSEQ_CATEGORY:-all}
 ASSEMBLY_LEVEL=${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}
 
@@ -206,9 +206,13 @@ fetch_to_file() {
 	source="$3"
 
 	if command -v wget >/dev/null 2>&1; then
-		wget -O "$output" "$url"
+		if ! wget -q -O "$output" "$url"; then
+			die "failed to download $url"
+		fi
 	elif command -v curl >/dev/null 2>&1; then
-		curl -fL -o "$output" "$url"
+		if ! curl -fsSL --retry 3 -o "$output" "$url"; then
+			die "failed to download $url"
+		fi
 	else
 		die "neither wget nor curl is available"
 	fi
@@ -239,21 +243,36 @@ fetch_url_to_status() {
 
 	if command -v wget >/dev/null 2>&1; then
 		if [ "$RESUME" = "1" ]; then
-			wget -c -O "$partial" "$url"
+			if ! wget -q -c -O "$partial" "$url"; then
+				echo "Failed to download $url" >&2
+				return 1
+			fi
 		else
-			wget -O "$partial" "$url"
+			if ! wget -q -O "$partial" "$url"; then
+				echo "Failed to download $url" >&2
+				return 1
+			fi
 		fi
 	elif command -v curl >/dev/null 2>&1; then
 		if [ "$RESUME" = "1" ]; then
-			curl -fL -C - -o "$partial" "$url"
+			if ! curl -fsSL --retry 3 -C - -o "$partial" "$url"; then
+				echo "Failed to download $url" >&2
+				return 1
+			fi
 		else
-			curl -fL -o "$partial" "$url"
+			if ! curl -fsSL --retry 3 -o "$partial" "$url"; then
+				echo "Failed to download $url" >&2
+				return 1
+			fi
 		fi
 	else
 		die "neither wget nor curl is available"
 	fi
 
-	[ -s "$partial" ] || return 1
+	if [ ! -s "$partial" ]; then
+		echo "Failed to download $url" >&2
+		return 1
+	fi
 	mv "$partial" "$output"
 	record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "downloaded"
 }
@@ -360,6 +379,17 @@ validate_download_list() {
 	' "$DOWNLOAD_LIST" || die "generated malformed RefSeq download URL(s); aborting before download"
 }
 
+report_download_progress() {
+	completed="$1"
+	total="$2"
+	if [ "$total" -eq 0 ]; then
+		echo "RefSeq download progress: 0/0 files complete (100%)."
+		return 0
+	fi
+	percent=$((completed * 100 / total))
+	echo "RefSeq download progress: $completed/$total files complete ($percent%)."
+}
+
 download_url_list() {
 	validate_download_list
 	total=$(wc -l < "$DOWNLOAD_LIST" | tr -d ' ')
@@ -378,6 +408,11 @@ download_url_list() {
 	mkdir -p "$status_dir"
 	job_count=0
 	job_index=0
+	completed=0
+	progress_step=$((total / 20))
+	[ "$progress_step" -gt 0 ] || progress_step=1
+	next_report="$progress_step"
+	report_download_progress 0 "$total"
 	while IFS='	' read -r source genome_url || [ -n "$genome_url" ]; do
 		[ -n "$genome_url" ] || continue
 		job_index=$((job_index + 1))
@@ -385,10 +420,21 @@ download_url_list() {
 		job_count=$((job_count + 1))
 		if [ "$job_count" -ge "$THREADS" ]; then
 			wait || die "failed to download one or more RefSeq genomes"
+			completed=$((completed + job_count))
+			if [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
+				report_download_progress "$completed" "$total"
+				while [ "$next_report" -le "$completed" ]; do
+					next_report=$((next_report + progress_step))
+				done
+			fi
 			job_count=0
 		fi
 	done < "$DOWNLOAD_LIST"
-	wait || die "failed to download one or more RefSeq genomes"
+	if [ "$job_count" -gt 0 ]; then
+		wait || die "failed to download one or more RefSeq genomes"
+		completed=$((completed + job_count))
+		report_download_progress "$completed" "$total"
+	fi
 
 	if [ -n "$(find "$status_dir" -type f -print -quit)" ]; then
 		cat "$status_dir"/*.tsv >> "$MANIFEST"

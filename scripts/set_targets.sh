@@ -13,8 +13,8 @@ Taxonomy rank:
   --species (default), --genus, --family, --order, --class, --phylum
 
 Download options for RefSeq databases:
-  --download-threads <N>              Download up to N sequence files at a time.
-  --resume-downloads                  Keep existing sequence files and resume partial downloads.
+  --download-threads <N>              Download up to N sequence files at a time (default: 8).
+  --resume-downloads                  Keep existing sequence files and resume partial downloads (default: on).
   --refseq-category <all|representative|reference>
                                       Select all, representative, or reference RefSeq assemblies.
   --assembly-level <level|all>        Select a RefSeq assembly_level (default: Complete Genome).
@@ -58,8 +58,8 @@ DBDR_INPUT="$1"
 shift
 RANK=0
 DATABASES=()
-DOWNLOAD_THREADS="${CLARK_REFSEQ_THREADS:-1}"
-RESUME_DOWNLOADS="${CLARK_REFSEQ_RESUME:-0}"
+DOWNLOAD_THREADS="${CLARK_REFSEQ_THREADS:-8}"
+RESUME_DOWNLOADS="${CLARK_REFSEQ_RESUME:-1}"
 REFSEQ_CATEGORY="${CLARK_REFSEQ_CATEGORY:-all}"
 ASSEMBLY_LEVEL="${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}"
 
