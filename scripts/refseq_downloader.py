@@ -195,7 +195,12 @@ def fetch_entry(entry, data_dir, max_attempts, failure_status, retry_delay, resu
 
 def print_progress(label, completed, total):
     percent = 100 if total == 0 else int(completed * 100 / total)
-    print("%s: %d/%d files complete (%d%%)." % (label, completed, total, percent), flush=True)
+    message = "%s: %d/%d files complete (%d%%)." % (label, completed, total, percent)
+    if sys.stdout.isatty():
+        sys.stdout.write("\r%s%s" % (message, "\n" if completed >= total else ""))
+        sys.stdout.flush()
+    else:
+        print(message, flush=True)
 
 
 def run_pass(entries, label, threads, max_attempts, failure_status, retry_delay, resume, data_dir):

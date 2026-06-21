@@ -683,6 +683,43 @@ test_refseq_downloader_rejects_malformed_urls_before_download() {
 	pass "RefSeq downloader rejects malformed generated URLs before download"
 }
 
+test_refseq_downloader_tty_progress_rewrites_line() {
+	python3 - "$REPO_DIR" <<'PY'
+import importlib.util
+import io
+from pathlib import Path
+import sys
+
+repo = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("refseq_downloader", repo / "scripts" / "refseq_downloader.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+class TtyBuffer(io.StringIO):
+    def isatty(self):
+        return True
+
+buffer = TtyBuffer()
+original_stdout = sys.stdout
+try:
+    sys.stdout = buffer
+    module.print_progress("RefSeq download progress", 0, 100)
+    module.print_progress("RefSeq download progress", 50, 100)
+    module.print_progress("RefSeq download progress", 100, 100)
+finally:
+    sys.stdout = original_stdout
+
+expected = (
+    "\rRefSeq download progress: 0/100 files complete (0%)."
+    "\rRefSeq download progress: 50/100 files complete (50%)."
+    "\rRefSeq download progress: 100/100 files complete (100%).\n"
+)
+if buffer.getvalue() != expected:
+    raise SystemExit("unexpected TTY progress output: %r" % buffer.getvalue())
+PY
+	pass "RefSeq downloader rewrites interactive terminal progress in place"
+}
+
 test_refseq_downloader_quiet_aggregate_progress() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-quiet-progress-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1631,6 +1668,7 @@ test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
 test_refseq_downloader_rejects_malformed_urls_before_download
+test_refseq_downloader_tty_progress_rewrites_line
 test_refseq_downloader_quiet_aggregate_progress
 test_refseq_downloader_retries_parallel_transient_failures
 test_refseq_downloader_defers_retry_until_after_first_pass
