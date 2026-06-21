@@ -387,6 +387,7 @@ STUB
 
 	PATH="$bindir:$PATH" \
 	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" "$dbdir" viruses > "$tmp/downloader.out"
 
 	require_file "$dbdir/.viruses"

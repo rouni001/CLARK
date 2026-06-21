@@ -1,8 +1,7 @@
 # CLARK Scripts
 
-This directory contains the implementation scripts used to install CLARK,
-prepare databases, classify reads, estimate abundance, and run maintenance
-tasks.
+This directory contains the implementation scripts used to prepare databases,
+classify reads, estimate abundance, and run maintenance tasks.
 
 The repository root intentionally does not keep duplicate script launchers. Use
 these scripts directly from this directory so the top-level project stays

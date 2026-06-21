@@ -212,7 +212,16 @@ download_assembly_source() {
 }
 
 download_static_urls() {
-	[ -f "$STATIC_URLS_FILE" ] || die "missing static URL manifest: $STATIC_URLS_FILE"
+	if [ ! -f "$STATIC_URLS_FILE" ]; then
+		case "$DB" in
+			plasmid|plastid|fungi|human)
+				die "missing static URL manifest: $STATIC_URLS_FILE"
+				;;
+			*)
+				return 0
+				;;
+		esac
+	fi
 
 	awk -v db="$DB" '
 		BEGIN { FS = "\t" }

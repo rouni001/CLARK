@@ -96,7 +96,7 @@ directory, use an absolute script path such as
 - If `scripts/classify_metagenome.sh` says targets are not configured, run
   `scripts/set_targets.sh` first.
 - If a script says an executable is missing, run `make all`.
-- If `-n` does not speed up classification, check the install output for
+- If `-n` does not speed up classification, check the build output for
   `OpenMP: disabled`.
 - Paths containing spaces are supported by the modernized scripts. Avoid moving
   the database directory after running `scripts/set_targets.sh`; rerun
