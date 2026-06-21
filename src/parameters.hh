@@ -30,7 +30,7 @@
 #ifndef PARAMETERS_HH
 #define PARAMETERS_HH
 
-#define VERSION "1.4.2.0-a"
+#define VERSION "1.4.3.0-a"
 
 #define SB              4       
 #define DBCTRESH	4

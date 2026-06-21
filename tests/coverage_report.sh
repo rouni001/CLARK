@@ -21,7 +21,7 @@ command -v gcov >/dev/null 2>&1 || {
 }
 
 make -C "$REPO_DIR" clean
-make -C "$REPO_DIR" all CXXFLAGS="$COVERAGE_CXXFLAGS" LDFLAGS="$COVERAGE_LDFLAGS"
+make -C "$REPO_DIR" all unit-tests CXXFLAGS="$COVERAGE_CXXFLAGS" LDFLAGS="$COVERAGE_LDFLAGS"
 "$REPO_DIR/tests/run_tests.sh"
 
 mkdir -p "$COVERAGE_DIR"

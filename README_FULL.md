@@ -311,10 +311,11 @@ i.e., the k-mer length and the minimum k-mers frequency (default 0).
 - `scripts/extractSequences.sh`: To extract/filter from the input data, the sequences identified
 to a specific taxon once the classification is done. This can be used for downstream 
 analysis (analysis of contaminants, genome assembly, etc.).
-Parameters are: The taxonomy id (of the taxon to look up), the address of the file 
-containing sequences (fasta/fastq format), the address of the CLARK results file 
-(csv file), and the minimum thresholds for the gamma value and the confidence score 
-(in the case the CLARK results file contains these statistics). 
+Parameters are: The taxonomy id (of the taxon to look up), the address of the file
+containing sequences (fasta/fastq format), the address of the CLARK results file
+(csv file), and the output file prefix. For full/spectrum result files containing
+gamma and confidence statistics, also provide the minimum thresholds for the gamma
+value and the confidence score.
 
 ## INTRODUCTION ON CLARK USAGE
 
@@ -1278,6 +1279,8 @@ In the default or express mode, the results format is the following for each lin
 
 
 ## VERSIONS
+
+Version 1.4.3.0-a	June 21, 2026.
 
 Version 1.4.2.0-a	June 21, 2026.
 

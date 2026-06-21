@@ -156,8 +156,13 @@ int main(int argc, const char** argv)
 	fclose(fdt);
 	///////////////////
 	string TaxidToChk(argv[1]);
-	double minG = atof(argv[5]);
-	double minC = atof(argv[6]);
+	double minG = 0.0;
+	double minC = 0.0;
+	if (isLongReport)
+	{
+		minG = atof(argv[5]);
+		minC = atof(argv[6]);
+	}
 	if (minG > 3.0)
 	{
 		cerr << "No sequence can be assigned with gamma score higher than 3.0 (which is the highest value achieved when using CLARK-S)."<< endl;
@@ -277,5 +282,4 @@ int main(int argc, const char** argv)
 	fout.close();
 	return 0;
 }
-
 

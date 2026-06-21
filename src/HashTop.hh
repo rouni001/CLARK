@@ -34,6 +34,7 @@
 #include "./dataType.hh"
 #include<string.h>
 #include<sstream>
+#include<string>
 
 class HashTop
 {
@@ -154,7 +155,7 @@ class HashTop
 			num = m_ITable[t]==m_Token?m_CTable[t]:0;
                         ss << "," << num;
                 }
-                string result = ss.str();
+                std::string result = ss.str();
 		_line = result;
 	}
 

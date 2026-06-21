@@ -1,3 +1,7 @@
+06/21/2026  Version 1.4.3.0-a:
+		Simplified CLARK classifier dispatch and tightened --kso mode validation.
+		Added unit and regression tests for file helpers, HashTop, and user-facing analysis tools.
+		Hardened abundance, sequence extraction, summary table, and target k-mer distribution edge cases.
 06/21/2026  Version 1.4.2.0-a:
 		RefSeq downloader refactored with dry-run, manifest and provenance outputs.
 		Removed install wrapper; users now build CLARK with "make all".
