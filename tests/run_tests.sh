@@ -426,6 +426,75 @@ test_refseq_downloader_dry_run_manifest() {
 	pass "RefSeq downloader dry-run writes manifest and provenance"
 }
 
+test_refseq_downloader_normalizes_ncbi_trailing_slash_paths() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-ncbi-url-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	log="$tmp/wget.log"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = "-O" ]; then
+	out="$2"
+	url="$3"
+	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	case "$url" in
+		*/bacteria/assembly_summary.txt)
+			{
+				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+				printf 'GCF_055383595.1\tna\tna\tna\tna\t111\t111\tMock bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tASM5538359v1\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/\n'
+				printf 'GCF_900128725.1\tna\tna\tna\tna\t222\t222\tMock bacterium 2\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tBCifornacula_v1.0\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/\n'
+			} > "$out"
+			;;
+		*/archaea/assembly_summary.txt)
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n' > "$out"
+			;;
+		*)
+			echo "unexpected wget -O URL: $url" >&2
+			exit 1
+			;;
+	esac
+else
+	echo "unexpected sequence download during dry-run: $*" >&2
+	exit 1
+fi
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --dry-run "$dbdir" bacteria > "$tmp/downloader.out"
+
+	grep -Fq "Selected 2 bacteria RefSeq genome(s)" "$tmp/downloader.out" || fail "RefSeq downloader did not select the NCBI-shaped fixture rows"
+	grep -Fq "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/GCF_055383595.1_ASM5538359v1_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
+		fail "RefSeq downloader did not normalize the real NCBI trailing-slash ftp_path shape"
+	if grep -Fq "//_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv"; then
+		fail "RefSeq downloader emitted the broken double-slash empty-basename URL"
+	fi
+	pass "RefSeq downloader normalizes NCBI trailing-slash assembly_summary paths"
+}
+
+test_refseq_downloader_rejects_malformed_urls_before_download() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-malformed-url-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	static_urls="$tmp/static-urls.tsv"
+	printf 'plasmid\trefseq_static\thttps://example.org/refseq/GCF_055383595.1_ASM5538359v1//_genomic.fna.gz\n' > "$static_urls"
+
+	if CLARK_REFSEQ_STATIC_URLS="$static_urls" "$REPO_DIR/scripts/download_RefSeqDB.sh" --dry-run "$dbdir" plasmid > "$tmp/stdout" 2> "$tmp/stderr"; then
+		fail "RefSeq downloader accepted a malformed empty-basename URL"
+	fi
+	grep -Fq "generated malformed RefSeq download URL" "$tmp/stderr" ||
+		fail "RefSeq downloader did not explain malformed URL rejection"
+	pass "RefSeq downloader rejects malformed generated URLs before download"
+}
+
 test_refseq_downloader_mocked_assembly_summary() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-mocked-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -449,7 +518,7 @@ if [ "$1" = "-O" ]; then
 		*/assembly_summary.txt)
 			{
 				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-				printf 'GCF_999999999.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2024-01-02\tMockVirus1\tCLARK\tna\tna\thttps://example.org/refseq/GCF_999999999.1_MockVirus1\n'
+				printf 'GCF_999999999.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2024-01-02\tMockVirus1\tCLARK\tna\tna\thttps://example.org/refseq/GCF_999999999.1_MockVirus1/\n'
 				printf 'GCF_000000000.1\tna\tna\tna\trepresentative genome\t10239\t10239\tOld virus\tna\tna\treplaced\tComplete Genome\tMajor\tFull\t2020-01-02\tOldVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000000.1_OldVirus\n'
 			} > "$out"
 			;;
@@ -477,6 +546,8 @@ STUB
 
 	require_file "$dbdir/.viruses"
 	grep -Fq "GCF_999999999.1_MockVirus1_genomic.fna" "$dbdir/.viruses" || fail "RefSeq downloader did not list decompressed virus FASTA"
+	grep -Fq "https://example.org/refseq/GCF_999999999.1_MockVirus1/GCF_999999999.1_MockVirus1_genomic.fna.gz" "$dbdir/.viruses.download_manifest.tsv" ||
+		fail "RefSeq downloader did not normalize trailing slashes in assembly_summary ftp_path"
 	grep -Fq "GCF_999999999.1" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not record assembly accession provenance"
 	grep -Fq "2024-01-02" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not preserve assembly source date"
 	grep -Fq "downloaded" "$dbdir/.viruses.download_manifest.tsv" || fail "RefSeq downloader did not record completed downloads"
@@ -508,8 +579,8 @@ if [ "$1" = "-O" ]; then
 		*/bacteria/assembly_summary.txt)
 			{
 				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-				printf 'GCF_111111111.1\tna\tna\tna\trepresentative genome\t111\t111\tExisting bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-01\tExisting\tCLARK\tna\tna\thttps://example.org/refseq/GCF_111111111.1_Existing\n'
-				printf 'GCF_222222222.1\tna\tna\tna\trepresentative genome\t222\t222\tNew bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-02\tNew\tCLARK\tna\tna\thttps://example.org/refseq/GCF_222222222.1_New\n'
+				printf 'GCF_111111111.1\tna\tna\tna\trepresentative genome\t111\t111\tExisting bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-01\tExisting\tCLARK\tna\tna\thttps://example.org/refseq/GCF_111111111.1_Existing/\n'
+				printf 'GCF_222222222.1\tna\tna\tna\trepresentative genome\t222\t222\tNew bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-02\tNew\tCLARK\tna\tna\thttps://example.org/refseq/GCF_222222222.1_New/\n'
 				printf 'GCF_333333333.1\tna\tna\tna\tna\t333\t333\tUnselected bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-03\tUnselected\tCLARK\tna\tna\thttps://example.org/refseq/GCF_333333333.1_Unselected\n'
 				printf 'GCF_444444444.1\tna\tna\tna\trepresentative genome\t444\t444\tDraft bacterium\tna\tna\tlatest\tScaffold\tMajor\tFull\t2025-01-04\tDraft\tCLARK\tna\tna\thttps://example.org/refseq/GCF_444444444.1_Draft\n'
 			} > "$out"
@@ -975,6 +1046,8 @@ test_set_targets_records_absolute_db_paths
 test_set_targets_passes_refseq_download_options
 test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
+test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
+test_refseq_downloader_rejects_malformed_urls_before_download
 test_refseq_downloader_mocked_assembly_summary
 test_refseq_downloader_filters_and_resumes
 test_make_metadata_uses_refseq_provenance_taxids

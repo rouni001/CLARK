@@ -273,7 +273,7 @@ download_assembly_source() {
 		-v assembly_level="$ASSEMBLY_LEVEL" \
 		-v download_list="$DOWNLOAD_LIST" '
 			BEGIN { OFS = "\t" }
-			$0 !~ /^#/ && $11 == "latest" && $20 != "" {
+			$0 !~ /^#/ && $11 == "latest" && $20 != "" && $20 != "na" {
 				if (assembly_level != "all" && $12 != assembly_level) {
 					next
 				}
@@ -283,8 +283,13 @@ download_assembly_source() {
 				if (category == "reference" && $5 != "reference genome") {
 					next
 				}
-				n = split($20, path_parts, "/")
-				url = $20 "/" path_parts[n] "_genomic.fna.gz"
+				ftp_path = $20
+				sub(/\/+$/, "", ftp_path)
+				n = split(ftp_path, path_parts, "/")
+				if (ftp_path == "" || path_parts[n] == "") {
+					next
+				}
+				url = ftp_path "/" path_parts[n] "_genomic.fna.gz"
 				print db, source, $1, $6, $7, $15, $12, $11, url >> provenance
 				print source, url >> download_list
 			}
@@ -333,7 +338,30 @@ write_sequence_marker() {
 	find "$(pwd)" -name "$(sequence_pattern)" > "$MARKER"
 }
 
+validate_download_list() {
+	awk -F '\t' '
+		NF < 2 || $1 == "" || $2 == "" {
+			print "Malformed RefSeq download entry: missing source or URL" > "/dev/stderr"
+			exit 1
+		}
+		{
+			url = $2
+			file_name = url
+			sub(/^.*\//, "", file_name)
+			if (file_name == "" || file_name == "_genomic.fna.gz" || file_name == ".genomic.fna.gz") {
+				print "Malformed RefSeq download URL: " url > "/dev/stderr"
+				exit 1
+			}
+			if (url ~ /\/\/_genomic\.fna\.gz$/ || url !~ /\.fna\.gz$/) {
+				print "Malformed RefSeq download URL: " url > "/dev/stderr"
+				exit 1
+			}
+		}
+	' "$DOWNLOAD_LIST" || die "generated malformed RefSeq download URL(s); aborting before download"
+}
+
 download_url_list() {
+	validate_download_list
 	total=$(wc -l < "$DOWNLOAD_LIST" | tr -d ' ')
 	echo "Selected $total $DB RefSeq genome(s) using assembly_level=$ASSEMBLY_LEVEL and refseq_category=$REFSEQ_CATEGORY."
 
