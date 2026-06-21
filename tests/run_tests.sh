@@ -346,6 +346,51 @@ test_set_targets_records_absolute_db_paths() {
 	pass "set_targets records absolute database paths from another working directory"
 }
 
+test_set_targets_passes_refseq_download_options() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-set-targets-download-options-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir_input="$tmp/db"
+	capture="$tmp/capture.txt"
+	mkdir -p "$fake_home/scripts" "$fake_home/exe" "$dbdir_input"
+	dbdir="$(cd -P "$dbdir_input" >/dev/null 2>&1 && pwd)"
+
+	cat > "$fake_home/scripts/make_metadata.sh" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+db="$1"
+dbdir="$2"
+{
+	printf 'threads=%s\n' "${CLARK_REFSEQ_THREADS:-}"
+	printf 'resume=%s\n' "${CLARK_REFSEQ_RESUME:-}"
+	printf 'category=%s\n' "${CLARK_REFSEQ_CATEGORY:-}"
+	printf 'assembly=%s\n' "${CLARK_REFSEQ_ASSEMBLY_LEVEL:-}"
+} >> "$CLARK_TEST_CAPTURE"
+printf '%s\n' "$dbdir/ref.fa" > "$dbdir/.$db"
+touch "$dbdir/.taxondata"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$dbdir/ref.fa" "111" "111" "222" "333" "444" "555" "666" > "$dbdir/.$db.fileToTaxIDs"
+STUB
+	cat > "$fake_home/exe/getTargetsDef" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+cat "$1" >/dev/null
+printf 'ref.fa\t111\n'
+STUB
+	chmod +x "$fake_home/scripts/make_metadata.sh" "$fake_home/exe/getTargetsDef"
+
+	CLARK_HOME="$fake_home" \
+	CLARK_TEST_CAPTURE="$capture" \
+		"$REPO_DIR/scripts/set_targets.sh" "$dbdir_input" bacteria --download-threads 4 --resume-downloads --refseq-category representative --assembly-level "Complete Genome" --genus >/dev/null
+
+	grep -Fq "threads=4" "$capture" || fail "set_targets did not pass download thread count"
+	grep -Fq "resume=1" "$capture" || fail "set_targets did not pass resume mode"
+	grep -Fq "category=representative" "$capture" || fail "set_targets did not pass RefSeq category"
+	grep -Fq "assembly=Complete Genome" "$capture" || fail "set_targets did not pass assembly level"
+	grep -Fq -- "-D $dbdir/bacteria_1/" "$fake_home/.settings" || fail "set_targets did not preserve taxonomy rank while parsing download options"
+	pass "set_targets passes RefSeq download options to metadata preparation"
+}
+
 test_update_taxonomy_requires_db_directory() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-update-taxonomy-state-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -393,6 +438,9 @@ test_refseq_downloader_mocked_assembly_summary() {
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+if [ "${1:-}" = "-c" ]; then
+	shift
+fi
 if [ "$1" = "-O" ]; then
 	out="$2"
 	url="$3"
@@ -404,6 +452,9 @@ if [ "$1" = "-O" ]; then
 				printf 'GCF_999999999.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2024-01-02\tMockVirus1\tCLARK\tna\tna\thttps://example.org/refseq/GCF_999999999.1_MockVirus1\n'
 				printf 'GCF_000000000.1\tna\tna\tna\trepresentative genome\t10239\t10239\tOld virus\tna\tna\treplaced\tComplete Genome\tMajor\tFull\t2020-01-02\tOldVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000000.1_OldVirus\n'
 			} > "$out"
+			;;
+		*_genomic.fna.gz)
+			printf '>mock-virus\nACGT\n' | gzip > "$out"
 			;;
 		*)
 			echo "unexpected wget -O URL: $url" >&2
@@ -431,6 +482,113 @@ STUB
 	grep -Fq "downloaded" "$dbdir/.viruses.download_manifest.tsv" || fail "RefSeq downloader did not record completed downloads"
 	[ ! -e "$dbdir/Viruses/download.sh" ] || fail "RefSeq downloader generated a legacy download.sh script"
 	pass "RefSeq downloader uses mocked assembly summaries without generated scripts"
+}
+
+test_refseq_downloader_filters_and_resumes() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-filter-resume-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	log="$tmp/wget.log"
+	mkdir -p "$bindir" "$dbdir/Bacteria"
+	printf '>existing-bacterium\nACGT\n' | gzip > "$dbdir/Bacteria/GCF_111111111.1_Existing_genomic.fna.gz"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "-c" ]; then
+	shift
+fi
+if [ "$1" = "-O" ]; then
+	out="$2"
+	url="$3"
+	printf 'summary %s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	case "$url" in
+		*/bacteria/assembly_summary.txt)
+			{
+				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+				printf 'GCF_111111111.1\tna\tna\tna\trepresentative genome\t111\t111\tExisting bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-01\tExisting\tCLARK\tna\tna\thttps://example.org/refseq/GCF_111111111.1_Existing\n'
+				printf 'GCF_222222222.1\tna\tna\tna\trepresentative genome\t222\t222\tNew bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-02\tNew\tCLARK\tna\tna\thttps://example.org/refseq/GCF_222222222.1_New\n'
+				printf 'GCF_333333333.1\tna\tna\tna\tna\t333\t333\tUnselected bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-03\tUnselected\tCLARK\tna\tna\thttps://example.org/refseq/GCF_333333333.1_Unselected\n'
+				printf 'GCF_444444444.1\tna\tna\tna\trepresentative genome\t444\t444\tDraft bacterium\tna\tna\tlatest\tScaffold\tMajor\tFull\t2025-01-04\tDraft\tCLARK\tna\tna\thttps://example.org/refseq/GCF_444444444.1_Draft\n'
+			} > "$out"
+			;;
+		*/archaea/assembly_summary.txt)
+			{
+				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			} > "$out"
+			;;
+		*_genomic.fna.gz)
+			printf 'download %s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+			printf '>new-bacterium\nTGCA\n' | gzip > "$out"
+			;;
+		*)
+			echo "unexpected wget -O URL: $url" >&2
+			exit 1
+			;;
+	esac
+else
+	url="${@: -1}"
+	printf 'download %s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	file="${url##*/}"
+	printf '>new-bacterium\nTGCA\n' | gzip > "$file"
+fi
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 2 --resume --refseq-category representative "$dbdir" bacteria > "$tmp/downloader.out"
+
+	grep -Fq "Selected 2 bacteria RefSeq genome(s)" "$tmp/downloader.out" || fail "RefSeq downloader did not report filtered bacteria selection"
+	grep -Fq "GCF_111111111.1_Existing_genomic.fna" "$dbdir/.bacteria" || fail "RefSeq downloader lost existing resumed bacteria FASTA"
+	grep -Fq "GCF_222222222.1_New_genomic.fna" "$dbdir/.bacteria" || fail "RefSeq downloader did not list newly downloaded bacteria FASTA"
+	grep -Fq "GCF_222222222.1" "$dbdir/.bacteria.provenance.tsv" || fail "RefSeq downloader did not keep new representative provenance"
+	if grep -Fq "GCF_333333333.1" "$dbdir/.bacteria.provenance.tsv" || grep -Fq "GCF_444444444.1" "$dbdir/.bacteria.provenance.tsv"; then
+		fail "RefSeq downloader provenance includes assemblies outside the requested filters"
+	fi
+	grep -Fq "skipped-existing" "$dbdir/.bacteria.download_manifest.tsv" || fail "RefSeq downloader did not record resumed existing archive"
+	if grep -Fq "download https://example.org/refseq/GCF_111111111.1_Existing" "$log"; then
+		fail "RefSeq downloader re-downloaded an existing archive during resume"
+	fi
+	pass "RefSeq downloader filters RefSeq assemblies and resumes existing archives"
+}
+
+test_make_metadata_uses_refseq_provenance_taxids() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-provenance-taxid-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home/scripts" "$fake_home/exe" "$dbdir/Bacteria" "$dbdir/taxonomy"
+	ln -s "$REPO_DIR/scripts/make_metadata.sh" "$fake_home/scripts/make_metadata.sh"
+	ln -s "$REPO_DIR/scripts/download_taxondata.sh" "$fake_home/scripts/download_taxondata.sh"
+	ln -s "$REPO_DIR/scripts/download_RefSeqDB.sh" "$fake_home/scripts/download_RefSeqDB.sh"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+
+	ref="$dbdir/Bacteria/GCF_555555555.1_FastPath_genomic.fna"
+	printf '>NC_555555.1 mock bacteria\nACGT\n' > "$ref"
+	printf '%s\n' "$ref" > "$dbdir/.bacteria"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'bacteria\tbacteria\tGCF_555555555.1\t555\t555\t2025-02-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_555555555.1_FastPath/GCF_555555555.1_FastPath_genomic.fna.gz\n'
+	} > "$dbdir/.bacteria.provenance.tsv"
+	printf '555 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	CLARK_HOME="$fake_home" "$REPO_DIR/scripts/make_metadata.sh" bacteria "$dbdir" > "$tmp/stdout" 2> "$tmp/stderr"
+
+	grep -Fq "$ref	GCF_555555555.1	555" "$dbdir/.bacteria.fileToAccssnTaxID" || fail "make_metadata did not use RefSeq provenance taxid mapping"
+	grep -Fq "$ref	555	555" "$dbdir/.bacteria.fileToTaxIDs" || fail "make_metadata did not build lineage from provenance taxid mapping"
+	if grep -Fq "Re-building bacteria.fileToAccssnTaxID" "$tmp/stdout" "$tmp/stderr"; then
+		fail "make_metadata fell back to global accession lookup despite usable RefSeq provenance"
+	fi
+	pass "make_metadata uses RefSeq provenance taxids without global accession-map lookup"
 }
 
 test_documentation_script_paths() {
@@ -814,9 +972,12 @@ test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
 test_scripts_directory_entrypoint
 test_set_targets_records_absolute_db_paths
+test_set_targets_passes_refseq_download_options
 test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_mocked_assembly_summary
+test_refseq_downloader_filters_and_resumes
+test_make_metadata_uses_refseq_provenance_taxids
 test_documentation_script_paths
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke

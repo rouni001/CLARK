@@ -185,6 +185,19 @@ Scripts provided for metagenomic classification:
    - Bacteria, viruses, and human: `scripts/set_targets.sh <DIR_DB/> bacteria viruses human`
    - Bacteria and custom: `scripts/set_targets.sh <DIR_DB/> bacteria custom`
 
+For faster RefSeq setup, especially for bacteria, use parallel and resumable
+downloads and optionally restrict RefSeq assemblies to representative or
+reference genomes:
+
+```sh
+scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 8 --resume-downloads --refseq-category representative
+```
+
+By default CLARK keeps the historical behavior: all latest complete RefSeq
+assemblies for the selected database are downloaded. For standard RefSeq
+libraries with assembly-summary taxids, CLARK now uses that provenance directly
+and avoids the large global accession-map lookup when it is not needed.
+
 ### Running the Classification
 
 Example commands:

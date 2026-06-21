@@ -34,6 +34,81 @@ supported_database() {
 	esac
 }
 
+build_refseq_taxid_map_from_provenance() {
+	local provenance="$DBDR/.$DB.provenance.tsv"
+	[ -s "$provenance" ] || return 1
+
+	case "$DB" in
+		bacteria|viruses|protozoa|fungi) ;;
+		*) return 1 ;;
+	esac
+
+	awk -F '\t' -v provenance="$provenance" '
+		BEGIN {
+			while ((getline line < provenance) > 0) {
+				ncols = split(line, cols, FS)
+				if (line ~ /^database\t/) {
+					for (i = 1; i <= ncols; i++) {
+						header[cols[i]] = i
+					}
+					continue
+				}
+				if (!("accession" in header) || !("taxid" in header) || !("url" in header)) {
+					exit 2
+				}
+				taxid = cols[header["taxid"]]
+				if (taxid !~ /^[0-9]+$/ || taxid == "0") {
+					continue
+				}
+				file_name = cols[header["url"]]
+				sub(/^.*\//, "", file_name)
+				sub(/\.gz$/, "", file_name)
+				taxid_by_file[file_name] = cols[header["accession"]] "\t" taxid
+			}
+			close(provenance)
+		}
+		{
+			file_name = $0
+			sub(/^.*\//, "", file_name)
+			if (file_name in taxid_by_file) {
+				print $0 "\t" taxid_by_file[file_name]
+				matched++
+			} else {
+				missing++
+			}
+		}
+		END {
+			if (matched == 0 || missing > 0) {
+				exit 1
+			}
+		}
+	' "$DBDR/.$DB"
+}
+
+ensure_taxonomy_data() {
+	local require_accession_maps="$1"
+	local downloader_args=()
+	if [ "$require_accession_maps" != "1" ]; then
+		downloader_args=(--skip-accession-maps)
+	fi
+
+	if [ ! -d "$DBDR/$TAXDR" ]; then
+		echo "Taxonomy data missing. The program will download data to $DBDR/$TAXDR."
+		mkdir -p "$DBDR/$TAXDR"
+		"$LDIR/scripts/download_taxondata.sh" "${downloader_args[@]}" "$DBDR/$TAXDR"
+	fi
+
+	if [ ! -f "$DBDR/.taxondata" ] || { [ "$require_accession_maps" = "1" ] && [ ! -s "$DBDR/$TAXDR/nucl_accss" ]; }; then
+		echo "Failed to find required taxonomy files. The program will try to download them..."
+		"$LDIR/scripts/download_taxondata.sh" "${downloader_args[@]}" "$DBDR/$TAXDR"
+	fi
+
+	[ -f "$DBDR/.taxondata" ] || die "failed to find taxonomy files"
+	if [ "$require_accession_maps" = "1" ]; then
+		[ -s "$DBDR/$TAXDR/nucl_accss" ] || die "failed to find accession-to-taxid maps"
+	fi
+}
+
 if [ "$#" -lt 2 ]; then
 	usage
 	exit 1
@@ -48,18 +123,6 @@ LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
 supported_database "$DB" || die "unsupported database '$DB'. Supported: bacteria, viruses, plasmid, plastid, protozoa, fungi, human, custom."
 
 mkdir -p "$DBDR/Custom"
-
-if [ ! -d "$DBDR/$TAXDR" ]; then
-	echo "Taxonomy data missing. The program will download data to $DBDR/$TAXDR."
-	mkdir -p "$DBDR/$TAXDR"
-	"$LDIR/scripts/download_taxondata.sh" "$DBDR/$TAXDR"
-fi
-
-if [ ! -f "$DBDR/.taxondata" ]; then
-	echo "Failed to find taxonomy files. The program will try to download them..."
-	"$LDIR/scripts/download_taxondata.sh" "$DBDR/$TAXDR"
-	[ -f "$DBDR/.taxondata" ] || die "failed to find taxonomy files"
-fi
 
 if [ ! -s "$DBDR/.$DB" ]; then
 	if [ "$DB" != "custom" ]; then
@@ -78,6 +141,22 @@ if [ ! -x "$LDIR/exe/getfilesToTaxNodes" ] || [ ! -x "$LDIR/exe/getAccssnTaxID" 
 fi
 
 [ -s "$DBDR/.$DB" ] || die "failed to find $DB sequences"
+
+if [ "$DB" != "human" ] && [ ! -s "$DBDR/.$DB.fileToAccssnTaxID" ]; then
+	tmp_accss="$DBDR/.$DB.fileToAccssnTaxID.tmp.$$"
+	if build_refseq_taxid_map_from_provenance > "$tmp_accss"; then
+		mv "$tmp_accss" "$DBDR/.$DB.fileToAccssnTaxID"
+		echo "Built $DB.fileToAccssnTaxID from RefSeq provenance."
+	else
+		rm -f "$tmp_accss"
+	fi
+fi
+
+require_accession_maps=0
+if [ "$DB" != "human" ] && [ ! -s "$DBDR/.$DB.fileToAccssnTaxID" ]; then
+	require_accession_maps=1
+fi
+ensure_taxonomy_data "$require_accession_maps"
 
 if [ "$DB" = "human" ]; then
 	if [ ! -s "$DBDR/.$DB" ]; then

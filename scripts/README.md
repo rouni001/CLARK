@@ -23,7 +23,23 @@ Before downloading large RefSeq datasets, you can inspect the planned work:
 scripts/download_RefSeqDB.sh --dry-run /path/to/clark-db bacteria
 ```
 
+For large bacteria databases, use parallel and resumable downloads from the
+user-facing setup script:
+
+```sh
+scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads
+```
+
+For faster exploratory databases, restrict RefSeq assembly summaries to
+representative or reference genomes:
+
+```sh
+scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads --refseq-category representative
+```
+
 The downloader writes `.<database>.download_manifest.tsv` and
 `.<database>.provenance.tsv` in the database directory. These files record the
 planned or completed URLs, source accessions, and RefSeq source dates when they
-are available from NCBI assembly summaries.
+are available from NCBI assembly summaries. Standard RefSeq libraries with
+assembly-summary taxids can use this provenance directly, avoiding the large
+global accession-map lookup when it is not needed.

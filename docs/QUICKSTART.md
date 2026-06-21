@@ -31,6 +31,19 @@ can be very large.
 scripts/set_targets.sh /path/to/clark-db bacteria viruses --species
 ```
 
+For faster bacteria setup, use parallel resumable downloads:
+
+```sh
+scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads --species
+```
+
+For exploratory runs where a smaller database is acceptable, use RefSeq
+representative genomes:
+
+```sh
+scripts/set_targets.sh /path/to/clark-db bacteria --download-threads 8 --resume-downloads --refseq-category representative --species
+```
+
 This writes the target configuration into CLARK's local `.settings` file and
 stores database-specific files under `/path/to/clark-db`. CLARK records this
 database directory as an absolute path so later classification and maintenance

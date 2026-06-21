@@ -919,6 +919,21 @@ the selected database(s) and also data of the taxonomy tree, from NCBI.
 Once the sequences are found or downloaded in the directory, the script will build 
 the targets for a given taxonomy rank. 
 
+Large RefSeq downloads, especially bacteria, can take a long time. To speed up
+the download step, `scripts/set_targets.sh` accepts RefSeq download options:
+```
+$ scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 8 --resume-downloads
+```
+To build a smaller bacteria database for exploratory work, restrict RefSeq
+assembly summaries to representative or reference genomes:
+```
+$ scripts/set_targets.sh <DIR_DB/> bacteria --download-threads 8 --resume-downloads --refseq-category representative
+```
+The default remains all latest complete RefSeq assemblies. For standard RefSeq
+libraries where NCBI assembly summaries provide taxids, CLARK uses that
+provenance directly and avoids downloading/processing the large global
+accession maps when they are not needed.
+
 The default taxonomy rank is species. To use a different taxonomy rank, for example, 
 genus, the command line is (from the example selecting bacteria, viruses and human):
 ```
