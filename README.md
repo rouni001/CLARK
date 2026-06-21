@@ -6,6 +6,7 @@ This repository now includes a reproducible `Makefile` build, safer shell
 scripts, focused regression tests, and beginner-oriented documentation.
 
 ```sh
+cd /path/to/CLARK
 make all
 make test
 ```
@@ -118,7 +119,9 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 - Additional scripts are provided for various tasks such as building spaced k-mer databases, resetting custom databases, and updating taxonomy data.
 
 All repository shell scripts live under `scripts/`; the project root no longer
-keeps duplicate script launchers.
+keeps duplicate script launchers. Examples using `scripts/...` assume your
+current directory is the CLARK repository root. From another directory, use the
+absolute script path, such as `/path/to/CLARK/scripts/classify_metagenome.sh`.
 
 ### Basic Example
 

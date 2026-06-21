@@ -6,6 +6,7 @@ want to debug compiler flags, shell quoting, or hidden CLARK state files.
 ## 1. Install
 
 ```sh
+cd /path/to/CLARK
 scripts/install.sh
 make test
 ```
@@ -31,7 +32,9 @@ scripts/set_targets.sh /path/to/clark-db bacteria viruses --species
 ```
 
 This writes the target configuration into CLARK's local `.settings` file and
-stores database-specific files under `/path/to/clark-db`.
+stores database-specific files under `/path/to/clark-db`. CLARK records this
+database directory as an absolute path so later classification and maintenance
+commands are not dependent on your current working directory.
 
 For custom references, place FASTA files in:
 
@@ -82,7 +85,9 @@ Record these details with each analysis:
 
 All repository shell scripts live under `scripts/`. Run commands such as
 `scripts/install.sh`, `scripts/set_targets.sh`, and
-`scripts/classify_metagenome.sh` directly from the repository root.
+`scripts/classify_metagenome.sh` directly from the repository root. From another
+directory, use an absolute script path such as
+`/path/to/CLARK/scripts/classify_metagenome.sh`.
 
 ## 6. Troubleshooting
 
@@ -91,6 +96,6 @@ All repository shell scripts live under `scripts/`. Run commands such as
 - If a script says an executable is missing, run `scripts/install.sh`.
 - If `-n` does not speed up classification, check the install output for
   `OpenMP: disabled`.
-- Paths containing spaces are supported by the modernized scripts, but avoid
-  moving the database directory after running `scripts/set_targets.sh`; rerun
-  `scripts/set_targets.sh` if the path changes.
+- Paths containing spaces are supported by the modernized scripts. Avoid moving
+  the database directory after running `scripts/set_targets.sh`; rerun
+  `scripts/set_targets.sh` if the database path changes.

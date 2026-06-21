@@ -31,4 +31,4 @@ echo "Results file(s) must contain Gamma scores."
 exit
 fi
 
-$LDIR/exe/getGammaDensity $@
+"$LDIR/exe/getGammaDensity" "$@"

@@ -277,6 +277,50 @@ test_scripts_directory_entrypoint() {
 	pass "scripts directory entrypoints resolve the repository root"
 }
 
+test_set_targets_records_absolute_db_paths() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-set-targets-path-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake home"
+	dbdir_input="$tmp/db dir"
+
+	mkdir -p "$fake_home/scripts" "$fake_home/exe" "$dbdir_input/Custom" "$dbdir_input/taxonomy"
+	dbdir="$(cd -P "$dbdir_input" >/dev/null 2>&1 && pwd)"
+	ref="$dbdir/Custom/ref A.fa"
+	ln -s "$REPO_DIR/scripts/make_metadata.sh" "$fake_home/scripts/make_metadata.sh"
+	ln -s "$REPO_DIR/scripts/download_taxondata.sh" "$fake_home/scripts/download_taxondata.sh"
+	ln -s "$REPO_DIR/scripts/download_RefSeqDB.sh" "$fake_home/scripts/download_RefSeqDB.sh"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+
+	printf '>NC_000001.1 synthetic custom reference\nACGT\n' > "$ref"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+		"$ref" "111" "111" "222" "333" "444" "555" "666" \
+		> "$dbdir/.custom.fileToTaxIDs"
+	printf '%s\t%s\t%s\n' "$ref" "NC_000001.1" "111" > "$dbdir/.custom.fileToAccssnTaxID"
+	touch "$dbdir/.taxondata"
+
+	(
+		cd "$tmp"
+		CLARK_HOME="$fake_home" "$REPO_DIR/scripts/set_targets.sh" "db dir" custom --species >/dev/null
+	)
+
+	grep -Fq -- "-T $dbdir/targets.txt" "$fake_home/.settings" || fail "set_targets did not store an absolute targets path"
+	grep -Fq -- "-D $dbdir/custom_0/" "$fake_home/.settings" || fail "set_targets did not store an absolute database path"
+	[ "$(cat "$fake_home/.DBDirectory")" = "$dbdir" ] || fail ".DBDirectory did not record the absolute database directory"
+	[ "$(cat "$fake_home/.dbAddress")" = "$dbdir/custom_0" ] || fail ".dbAddress did not record the absolute k-mer database directory"
+	pass "set_targets records absolute database paths from another working directory"
+}
+
+test_documentation_script_paths() {
+	if grep -E "\./(buildSpacedDB|classify_metagenome|clean|download_RefSeqDB|download_taxondata|estimate_abundance|evaluate_density_confidence|evaluate_density_gamma|extractSequences|getTargetsKmers_distribution|install|makeSummaryTables|make_metadata|resetCustomDB|set_targets|updateTaxonomy)\.sh|\./scripts/" \
+		"$REPO_DIR/README.md" "$REPO_DIR/README_FULL.md" "$REPO_DIR/docs/QUICKSTART.md" "$REPO_DIR/scripts/README.md" >/dev/null; then
+		fail "documentation still contains root-relative script examples"
+	fi
+	pass "README documents scripts/ commands without root-relative script paths"
+}
+
 test_get_targets_def_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-targets-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -553,6 +597,8 @@ test_classify_wrapper_gzip
 test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
 test_scripts_directory_entrypoint
+test_set_targets_records_absolute_db_paths
+test_documentation_script_paths
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke

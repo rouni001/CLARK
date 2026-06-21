@@ -19,7 +19,7 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 22 regression tests. It verifies:
+The suite currently contains 24 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
@@ -31,6 +31,8 @@ The suite currently contains 22 regression tests. It verifies:
 - `--light` selects `CLARK-l`
 - conflicting `--light` and `--spaced` options are rejected
 - direct `scripts/` entrypoints resolve the repository root correctly
+- `scripts/set_targets.sh` records absolute database paths when run from another working directory
+- README command examples use `scripts/` without stale root-relative script paths
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
 - `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
 - `getfilesToTaxNodes` expands a tiny taxonomy lineage

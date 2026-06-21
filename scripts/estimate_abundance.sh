@@ -33,7 +33,7 @@ LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ $# -lt 1 ]; then
 echo -n "Usage: $0 " 
-$LDIR/exe/getAbundance
+"$LDIR/exe/getAbundance"
 exit
 fi
-$LDIR/exe/getAbundance $@
+"$LDIR/exe/getAbundance" "$@"

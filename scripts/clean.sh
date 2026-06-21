@@ -28,17 +28,17 @@ if [ ! -s "$LDIR/.DBDirectory" ]; then
 echo "There is no database directory to clean"
 exit
 fi
-DIR=`cat $LDIR/.DBDirectory`
+DIR=$(cat "$LDIR/.DBDirectory")
 echo "Are you sure you want to delete all data in the database directoy: $DIR? (yes/no)"
-read decision
+read -r decision
 
-if [ $decision = "yes" ] || [ $decision = "y" ] || [ $decision = "Y" ] || [ $decision = "Yes" ] || [ $decision = "YES" ]; then
+if [ "$decision" = "yes" ] || [ "$decision" = "y" ] || [ "$decision" = "Y" ] || [ "$decision" = "Yes" ] || [ "$decision" = "YES" ]; then
 echo "Cleaning: on-going..."
-rm -Rf $DIR
-rm -f $LDIR/.dbAddress
-rm -f $LDIR/.DBDirectory 
-rm -f $LDIR/.settings
+rm -Rf "$DIR"
+rm -f "$LDIR/.dbAddress"
+rm -f "$LDIR/.DBDirectory"
+rm -f "$LDIR/.settings"
 echo "Cleaning: done."
-elif [ $decision = "no" ] || [ $decision = "n" ] || [ $decision = "N" ] || [ $decision = "No" ] || [ $decision = "NO" ]; then
+elif [ "$decision" = "no" ] || [ "$decision" = "n" ] || [ "$decision" = "N" ] || [ "$decision" = "No" ] || [ "$decision" = "NO" ]; then
 echo "Cleaning: canceled"
 fi

@@ -24,37 +24,9 @@
 
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-for DIR in `cat $LDIR/.DBDirectory`
+while IFS= read -r DIR || [ -n "$DIR" ]
 do
-cd $DIR/taxonomy/
+[ -n "$DIR" ] || continue
+"$LDIR/scripts/download_taxondata.sh" "$DIR/taxonomy"
 
-# Download taxonomy tree info (GI <-> TaxID, and TaxID: info)
-# Download taxonomy tree info (AccessionID <-> TaxID, and TaxID: nodes, merged, names)
-
-echo "Downloading... "
-wget ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_gb.accession2taxid.gz
-wget ftp://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_wgs.accession2taxid.gz
-
-wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz
-
-# Extrat downloaded data
-if [ -s nucl_gb.accession2taxid.gz ] && [ -s taxdump.tar.gz ] && [ -s nucl_wgs.accession2taxid.gz ] ; then
-        echo "Uncompressing files... "
-        #gunzip gi_taxid_nucl.dmp.gz
-        gunzip nucl_wgs.accession2taxid.gz
-        gunzip nucl_gb.accession2taxid.gz
-        tar -zxf taxdump.tar.gz
-        if [ -s nucl_gb.accession2taxid ] && [ -s nodes.dmp ] && [ -s nucl_wgs.accession2taxid ]; then
-                cat nucl_gb.accession2taxid > ./nucl_accss
-                cat nucl_wgs.accession2taxid >> ./nucl_accss
-                touch ../.taxondata
-                exit
-        else
-                echo "Failed to uncompress taxonomy data."
-        fi
-else
-        echo "Failed to download taxonomy data!"
-        exit
-fi
-
-done
+done < "$LDIR/.DBDirectory"

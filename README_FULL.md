@@ -248,6 +248,9 @@ CLARKSCV1.3.0).
 
 After the installation, you can also notice that several scripts are available
 under the `scripts/` directory. Run them as `scripts/<script-name>.sh`.
+Commands written as `scripts/...` assume your current directory is the CLARK
+repository root. From another directory, use the absolute script path, such as
+`/path/to/CLARK/scripts/classify_metagenome.sh`.
 Especially:
 
 - `scripts/set_targets.sh` and `scripts/classify_metagenome.sh`: They allow you to define your database
@@ -920,6 +923,9 @@ genus, the command line is (from the example selecting bacteria, viruses and hum
 ```
 $ scripts/set_targets.sh <DIR_DB/> bacteria viruses human --genus
 ```
+The database directory is recorded as an absolute path, so later CLARK scripts can
+find the configured database even if they are launched from another working
+directory.
 In the current release, the user can choose between six ranks (species to phylum):
 --species (the default value), --genus, --family, --order, --class or --phylum.
 

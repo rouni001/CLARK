@@ -31,4 +31,4 @@ echo "Results file(s) must contain confidence scores."
 exit
 fi
 
-$LDIR/exe/getConfidenceDensity $@
+"$LDIR/exe/getConfidenceDensity" "$@"

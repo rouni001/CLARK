@@ -25,8 +25,8 @@
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ $# -lt 3 ]; then
-$LDIR/exe/extractSeqs
+"$LDIR/exe/extractSeqs"
 exit
 fi
 
-$LDIR/exe/extractSeqs $@
+"$LDIR/exe/extractSeqs" "$@"

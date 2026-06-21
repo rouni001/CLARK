@@ -33,7 +33,7 @@ LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ $# -lt 1 ]; then
 echo -n "Usage: "
-$LDIR/exe/makeSummaryTables 
+"$LDIR/exe/makeSummaryTables"
 exit
 fi
-$LDIR/exe/makeSummaryTables $@
+"$LDIR/exe/makeSummaryTables" "$@"
