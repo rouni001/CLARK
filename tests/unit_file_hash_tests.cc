@@ -7,10 +7,8 @@
 #include <string>
 #include <vector>
 
-using namespace std;
-
-#include "src/file.hh"
 #include "src/HashTop.hh"
+#include "src/file.hh"
 
 static int failures = 0;
 
