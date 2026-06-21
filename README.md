@@ -59,6 +59,11 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
+### Version 1.4.3 (June 21, 2026)
+- Simplified CLARK classifier dispatch and made `--kso` validation order-independent.
+- Added focused unit/regression tests for file helpers, `HashTop`, and user-facing analysis tools.
+- Hardened abundance, sequence extraction, summary table, and target k-mer distribution edge cases.
+
 ### Version 1.4.2 (June 21, 2026)
 - Refactored RefSeq downloader with dry-run, manifest, and provenance outputs.
 - Removed `scripts/install.sh`; build CLARK with `make all`.
