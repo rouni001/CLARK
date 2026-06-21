@@ -13,14 +13,15 @@ script_dir() {
 	cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
 }
 
-LDIR="$(script_dir)"
+SCRIPT_DIR="$(script_dir)"
+LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
 
 echo "Installing CLARK from $LDIR"
 echo "Compiler: ${CXX:-c++}"
 
 if ! command -v "${CXX:-c++}" >/dev/null 2>&1; then
 	echo "Error: C++ compiler '${CXX:-c++}' was not found." >&2
-	echo "Install g++ or set CXX to a working compiler, then rerun ./install.sh." >&2
+	echo "Install g++ or set CXX to a working compiler, then rerun scripts/install.sh." >&2
 	exit 1
 fi
 

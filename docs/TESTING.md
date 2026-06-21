@@ -1,7 +1,7 @@
 # Testing and Coverage Notes
 
 The current regression suite is intentionally lightweight. It is designed to
-catch install, wrapper, and portability regressions quickly on both Linux and
+catch install, script, and portability regressions quickly on both Linux and
 macOS.
 
 Run:
@@ -19,16 +19,20 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 20 regression tests. It verifies:
+The suite currently contains 24 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
 - modernized shell entrypoints parse successfully
-- `classify_metagenome.sh` preserves paths with spaces
+- the repository root does not contain duplicated shell scripts
+- `scripts/classify_metagenome.sh` preserves paths with spaces
 - gzipped inputs are decompressed and temporary files are cleaned up
 - paired-end inputs are passed through correctly
 - `--light` selects `CLARK-l`
 - conflicting `--light` and `--spaced` options are rejected
+- direct `scripts/` entrypoints resolve the repository root correctly
+- `scripts/set_targets.sh` records absolute database paths when run from another working directory
+- README command examples use `scripts/` without stale root-relative script paths
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
 - `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
 - `getfilesToTaxNodes` expands a tiny taxonomy lineage
@@ -54,9 +58,9 @@ below the required minimum.
 
 Current coverage from `make coverage`:
 
-- covered executable C++ lines: 908
-- total executable C++ lines: 5,657
-- line coverage: 16.05%
+- covered executable C++ lines: 915
+- total executable C++ lines: 5,611
+- line coverage: 16.31%
 - required minimum: 10.00%
 
 ## Coverage Limitations
@@ -75,5 +79,4 @@ than for the core classifier algorithm.
   output
 - downloader tests using mocked NCBI manifests instead of live network calls
 - converter tests for tiny contiguous-to-spaced k-mer databases
-- continued replacement of fixed-size buffers and `sprintf` usage, followed by
-  negative-path tests for long filenames and malformed input
+- negative-path tests for long filenames and malformed input

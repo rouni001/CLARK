@@ -22,34 +22,34 @@
 #   resetDB.sh: To reset the database files created by CLARK 
 #
 
-if [ "$1" = "--help" ]; then
+if [ "${1:-}" = "--help" ]; then
 	echo "This script erases all database files created with old Custom sequences."
 	echo "Please use this script after having updated the Custom folder."
 	exit
 fi
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 echo "Are you sure you have updated the Custom directory ? (yes/no)"
-read decision
+read -r decision
 
-if [ $decision = "yes" ] || [ $decision = "y" ] || [ $decision = "Y" ] || [ $decision = "Yes" ] || [ $decision = "YES" ]; then
+if [ "$decision" = "yes" ] || [ "$decision" = "y" ] || [ "$decision" = "Y" ] || [ "$decision" = "Yes" ] || [ "$decision" = "YES" ]; then
 echo -n "The program will clean all database files created with the previous data in the Custom directory..."
-for DIR in `cat $LDIR/.DBDirectory`
+while IFS= read -r DIR || [ -n "$DIR" ]
 do
-rm -f $DIR/targets.txt
-rm -Rf $DIR/custom*
-rm -Rf $DIR/*_custom*
-rm -f $DIR/.custom*
+[ -n "$DIR" ] || continue
+rm -f "$DIR/targets.txt"
+rm -Rf "$DIR"/custom*
+rm -Rf "$DIR"/*_custom*
+rm -f "$DIR"/.custom*
 
 echo "done"
 echo -n "Resetting the list of custom sequences..."
-find $DIR/Custom/ -name '*.f*' > $DIR/.custom
+find "$DIR/Custom/" -name '*.f*' > "$DIR/.custom"
 echo "done"
-done
+done < "$LDIR/.DBDirectory"
 
 else
 
 exit
 fi
-

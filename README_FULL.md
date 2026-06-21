@@ -117,7 +117,7 @@ This release includes scripts to produce the abundance estimation per target (i.
 the count and proportion of objects assigned to a target) with filtering possible
 on the confidence score. Also, the user can get the density of assigned objects per 
 confidence score. The user can also pass to CLARK objects as compressed
-files (GZ format) directly to "classify_metagenome.sh". Finally, bugs fixes and
+files (GZ format) directly to "scripts/classify_metagenome.sh". Finally, bugs fixes and
 code improvement are made.
 
 - On 06/03/2015, the version 1.1.3 is available:
@@ -176,7 +176,7 @@ for CLARK-S. Code improvements and bug fixes are included.
 
 - On 02/20/2019, the version 1.2.6 is available:
 A new script is added to extract sequences identified to a specific taxon
-"extractSequences.sh". In addition, the script "estimate_abundance.sh" allows now 
+"scripts/extractSequences.sh". In addition, the script "scripts/estimate_abundance.sh" allows now
 to output the results in the mpa format (tab-delimited format from MetaPhlAn). 
 Code improvements and bug fixes are included.
 
@@ -237,7 +237,7 @@ approximation) of results you would get by running CLARK or CLARK-S.
 First, download the zipped package of the latest version, available from 
 the CLARK webpage ("Download tab"), http://clark.cs.ucr.edu.
 Second, uncompress the tar.gz file ("tar -xvf CLARKV1.3.0.tar.gz"), then go to 
-the sub-directory "CLARKSCV1.3.0" and execute the installation script ("./install.sh"). 
+the sub-directory "CLARKSCV1.3.0" and execute the installation script ("scripts/install.sh").
 
 The installation is done! You can now run CLARK and any of the provided scripts.
 
@@ -246,38 +246,42 @@ CLARKSCV1.3.0).
 
 ## SCRIPTS
 
-After the installation, you can also notice that several scripts are available. 
+After the installation, you can also notice that several scripts are available
+under the `scripts/` directory. Run them as `scripts/<script-name>.sh`.
+Commands written as `scripts/...` assume your current directory is the CLARK
+repository root. From another directory, use the absolute script path, such as
+`/path/to/CLARK/scripts/classify_metagenome.sh`.
 Especially:
 
-- `set_targets.sh` and `classify_metagenome.sh`: They allow you to define your database
-and to classify your metagenomes against it. set_targets.sh can be called
+- `scripts/set_targets.sh` and `scripts/classify_metagenome.sh`: They allow you to define your database
+and to classify your metagenomes against it. `scripts/set_targets.sh` can be called
 indefinitely to build several database(s) (downloaded from NCBI or available 
 "locally" in your disk). 
-Note the last call of set_targets.sh defines the "working database",
-the database that classify_metagenome.sh and other scripts use as reference for their
+Note the last call of `scripts/set_targets.sh` defines the "working database",
+the database that `scripts/classify_metagenome.sh` and other scripts use as reference for their
 computations.
 
-- `estimate_abundance.sh`: It computes the abundance estimation (count/proportion 
+- `scripts/estimate_abundance.sh`: It computes the abundance estimation (count/proportion
 of objects assigned to targets).
 
-- `evaluate_density_confidence.sh` and `evaluate_density_gamma.sh`: These two scripts 
+- `scripts/evaluate_density_confidence.sh` and `scripts/evaluate_density_gamma.sh`: These two scripts
 take in input one or several CLARK results (containing confidence/gamma scores) 
 and output/plot the density of assignments per confidence score (or gamma score).
 
-- `buildSpacedDB.sh`: It creates the sets of discriminate spaced k-mers from the 
+- `scripts/buildSpacedDB.sh`: It creates the sets of discriminate spaced k-mers from the
 selected databases.
 
-- `clean.sh`: This script will delete permanently all data related (generated and 
-downloaded) of the database directory defined in set_targets.h.
+- `scripts/clean.sh`: This script will delete permanently all data related (generated and
+downloaded) of the database directory defined in `scripts/set_targets.sh`.
 
-- `resetCustomDB.sh`: It resets the targets definition with sequences (newly 
+- `scripts/resetCustomDB.sh`: It resets the targets definition with sequences (newly
 added/modified) of the customized database. Any call of this script must be 
-followed by a run of set_target.sh.
+followed by a run of scripts/set_targets.sh.
 
-- `updateTaxonomy.sh`: To download the latest taxonomy data (taxonomy id, 
+- `scripts/updateTaxonomy.sh`: To download the latest taxonomy data (taxonomy id,
 accession numbers, etc.) from the NCBI website.
 
-- `makeSummaryTables.sh`: To build three tables summarizing results from one or several 
+- `scripts/makeSummaryTables.sh`: To build three tables summarizing results from one or several
 CLARK reports file. Given a rank r and a minimum abundance level (i.e., the ratio 
 between number of reads classified to that taxon and the total number of reads in 
 the report file) l, expressed in percent, passed in parameters, this script produces 
@@ -299,12 +303,12 @@ This table provides the hit count distribution of the targets identified per rep
 as well as the total number of reads, the total number of reads classified and the
 alpha-diversity.
 
-- `getTargetsKmers_distribution.sh`: To print out the distribution of the target-specific
+- `scripts/getTargetsKmers_distribution.sh`: To print out the distribution of the target-specific
 k-mers in a file entitled "targets.distribution.csv" in the working database. 
 The parameters for this script are the key parameters used for creating the database,
 i.e., the k-mer length and the minimum k-mers frequency (default 0).
 
-- `extractSequences.sh`: To extract/filter from the input data, the sequences identified
+- `scripts/extractSequences.sh`: To extract/filter from the input data, the sequences identified
 to a specific taxon once the classification is done. This can be used for downstream 
 analysis (analysis of contaminants, genome assembly, etc.).
 Parameters are: The taxonomy id (of the taxon to look up), the address of the file 
@@ -661,7 +665,7 @@ and it produces detailed results. However, this variant is the most RAM-consumin
 Unlike CLARK, results produced by CLARK-S are already filtered (i.e., assignments 
 with confidence score < 0.75 or gamma score < 0.06 are rejected). 
 However, you can use a stricter filtering to get more precise results 
-(see option of the script estimate_abundance.sh). 
+(see option of `scripts/estimate_abundance.sh`).
 
 
 #### Running CLARK-S:
@@ -669,11 +673,11 @@ However, you can use a stricter filtering to get more precise results
 The current release exploits spaced k-mers of length 31 and weight 22. Before 
 classifying your metagenomic sample, the database of discriminative 31-mers (e.g., 
 from bacterial genomes) and then the database of discriminative spaced 31-mers 
-(using the script "buildSpacedDB.sh") must be created.
+(using `scripts/buildSpacedDB.sh`) must be created.
 
 Step 0 (Set the database and its directory "DBD"):
 ```
-$ ./set_targets.sh ./DBD/ bacteria <rank> 
+$ scripts/set_targets.sh ./DBD/ bacteria <rank>
 ```
 (where \<rank\> is --species, --genius, etc.. By default --species is always used,
 in that case, no need to indicate it.)
@@ -687,7 +691,7 @@ If the database files of 31-mers are already created for the database and the ra
 specified in step 0 then you can skip this step.
 This can be done by running any classification with k=31, for example: 
 ```
-$ ./classify_metagenome.sh -O sample.fa -R result
+$ scripts/classify_metagenome.sh -O sample.fa -R result
 ```
 where sample.fa is some fasta file data. This operation is only needed to create the  
 database of discriminative 31-mers.
@@ -695,7 +699,7 @@ database of discriminative 31-mers.
 Step 2 (Create the databases of discriminative spaced k-mers):
 
 ```
-$ ./buildSpacedDB.sh
+$ scripts/buildSpacedDB.sh
 ```
 
 This task will take several hours to create discriminative spaced k-mers for all the
@@ -708,7 +712,7 @@ $ ./exe/CLARK-S -T ./targets_addresses.txt -D ./DBD/ -O ./sample.fq -R ./result 
 ```
 or
 ```
-$ ./classify_metagenome.sh -O sample.fq -R result --spaced
+$ scripts/classify_metagenome.sh -O sample.fq -R result --spaced
 ```
 Note: If you decide to work with a different taxonomy rank and/or database then 
 you will need to repeat the step 0 and step 1.
@@ -861,17 +865,17 @@ We provide several scripts to facilitate the classification in the context of
 metagenomics. CLARK can preprocess databases of bacteria, viruses, plasmid, plastid, 
 protozoa, fungi or human (downloaded from NCBI/RefSeq) or a customized set of genomes.
 
-First, we present here two scripts, "set_targets.sh" and "./classify_metagenome.sh" that 
+First, we present here two scripts, `scripts/set_targets.sh` and `scripts/classify_metagenome.sh` that
 work together.
 Second, we present the script to get the abundance estimation (count and proportion for 
-each target identified), "estimate_abundance.sh", from one or several results file(s).
+each target identified), `scripts/estimate_abundance.sh`, from one or several results file(s).
 
 
 ### Setting and classification
 
 #### Step I: Setting targets
 
-After the installation (./install.sh), the user must create a directory to store all 
+After the installation (scripts/install.sh), the user must create a directory to store all
 reference sequences (bacteria, viruses, plasmid, plastid, protozoa, fungi, human and custom). 
 For all our examples below, we name this directory path in a generic way <DIR_DB/> for clarity. 
 This directory can be anywhere in your disk(s).
@@ -881,15 +885,15 @@ bacteria, viruses, ..., fungi, human and/or custom.
 
 For example, only bacteria genomes:
 ```
-$ ./set_targets.sh <DIR_DB/> bacteria
+$ scripts/set_targets.sh <DIR_DB/> bacteria
 ```
 To work with bacteria, viruses and human:
 ```
-$ ./set_targets.sh <DIR_DB/> bacteria viruses human
+$ scripts/set_targets.sh <DIR_DB/> bacteria viruses human
 ```
 To work with bacteria, viruses, fungi and human:
 ```
-$ ./set_targets.sh <DIR_DB/> bacteria viruses fungi human
+$ scripts/set_targets.sh <DIR_DB/> bacteria viruses fungi human
 ```
 
 To classify against a custom database:
@@ -901,11 +905,11 @@ and then run set_targets. In order words, the user must:
 (2) copy/move the sequences of interest in the Custom;
 (3) run:
 ```
-$ ./set_targets.sh <DIR_DB/> custom
+$ scripts/set_targets.sh <DIR_DB/> custom
 ```
 or for example, when combining the bacteria genomes with the Custom sequences:
 ```
-$ ./set_targets.sh <DIR_DB/> bacteria custom
+$ scripts/set_targets.sh <DIR_DB/> bacteria custom
 ```
 
 In general case (when the user selects bacteria, viruses, ..., fungi and/or human), 
@@ -917,8 +921,11 @@ the targets for a given taxonomy rank.
 The default taxonomy rank is species. To use a different taxonomy rank, for example, 
 genus, the command line is (from the example selecting bacteria, viruses and human):
 ```
-$ ./set_targets.sh <DIR_DB/> bacteria viruses human --genus
+$ scripts/set_targets.sh <DIR_DB/> bacteria viruses human --genus
 ```
+The database directory is recorded as an absolute path, so later CLARK scripts can
+find the configured database even if they are launched from another working
+directory.
 In the current release, the user can choose between six ranks (species to phylum):
 --species (the default value), --genus, --family, --order, --class or --phylum.
 
@@ -929,14 +936,14 @@ Consider first the genus or species rank, then if a high proportion of reads
 cannot be classified, reset your targets definition at a higher taxonomy rank 
 (e.g., family or phylum).
 
-Once set_targets.sh is finished, the user can proceed to the step II. However, if 
+Once scripts/set_targets.sh is finished, the user can proceed to the step II. However, if
 the user wants to modify the selected databases and/or taxonomy rank, then he/she will 
-need to run again set_targets.sh with updated parameters before proceeding to step II.
+need to run again scripts/set_targets.sh with updated parameters before proceeding to step II.
 
 #### Step II: Running the classification
 
 The script to run the classification of a metagenomic sample against the database(s) 
-previously set in step I is "classify_metagenome.sh".
+previously set in step I is `scripts/classify_metagenome.sh`.
 
 For your convenience, this script runs the executable CLARK, CLARK-l or CLARK and allows 
 you to pass few parameters.
@@ -944,24 +951,24 @@ you to pass few parameters.
 For example, say objects to be classified are reads in "sample.fa" (e.g., located in the 
 current directory), and results to be stored in "result.csv". A basic command line is:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result
 ```
 As explained in the section "MANUAL & OPTIONS", thanks to identifiers "-O" and "-R", 
 the script will pass the objects file "sample.fa" and results will be stored
 in "./result.csv". Objects are classified against the targets and the taxonomy rank
-defined by the last execution of ./set_targets.sh.
+defined by the last execution of scripts/set_targets.sh.
 
 IMPORTANT NOTES:
 - The targets definition is automatically passed to CLARK in step II. The file has been
- computed by set_targets.sh.
+ computed by scripts/set_targets.sh.
 
-- The script set_targets.sh assumes that each reference file from bacteria, ..., fungi
+- The script `scripts/set_targets.sh` assumes that each reference file from bacteria, ..., fungi
  or custom database contains an accession numberr (in the RefSeq records format: 
 i.e., ">accession.number ..." or ">gi|number|ref|accession.number| ..." ). 
 If an accession number is missing in a file then this file will not be used 
 for the classification. 
 
-- set_targets.sh also maps the accession number found in each reference sequence to its 
+- scripts/set_targets.sh also maps the accession number found in each reference sequence to its
 taxonomy ID based on the latest NCBI taxonomy data. If a mapping cannot be made for a 
 given sequence, then it will NOT be counted and excluded from the targets definition.
 The total number of excluded files is prompted in the standard output, and all files that 
@@ -971,41 +978,41 @@ If some files are excluded, then it probably means that they have been removed f
 curations for example (visit the RefSeq FAQ webpage) or maybe because your local taxonomy
 information are no nore up-to-date (see next point).
 
-- You can update your local taxonomy database thanks to the script "updateTaxonomy.sh"
-You can use this script before running set_targets.sh.
+- You can update your local taxonomy database thanks to the script `scripts/updateTaxonomy.sh`
+You can use this script before running scripts/set_targets.sh.
 
 - If the user wants to work with a different customized database (for example, by removing
 or adding more sequences of interest in the Custom folder) then the targets definition
-must be reset. We made it simple with the script "resetCustomDB.sh": 
+must be reset. We made it simple with the script `scripts/resetCustomDB.sh`:
 After the sequences in the Custom folder have been updated, just run:
-$ ./resetCustomDB.sh
-Then, run set_target.sh with the desired settings.
+$ scripts/resetCustomDB.sh
+Then, run scripts/set_targets.sh with the desired settings.
 
 - The database files (*.ky, *.lb and *.sz) will be created inside a subdirectory of the 
-specified database directory in step I (i.e., "./DBD/") by classify_metagenome.sh.
+specified database directory in step I (i.e., "./DBD/") by scripts/classify_metagenome.sh.
 
 - The default values (the k-mer length, the mode, the number of threads, etc.) are used 
 if not specified by the user, just like indicated in the previous section.
 
-- The script classify_metagenome.sh still allows you to pass customized parameters and 
-options, similarly to the previous section. classify_metagenome.sh follows options defined
+- The script `scripts/classify_metagenome.sh` still allows you to pass customized parameters and
+options, similarly to the previous section. `scripts/classify_metagenome.sh` follows options defined
 in "MANUAL & OPTIONS"(see below some examples). So you can change the k-mer length,
 the number of parallel threads, mode, etc.
 
-We present below some examples of customized classification using classify_metagenome.sh.
+We present below some examples of customized classification using scripts/classify_metagenome.sh.
 
 ##### To use 20-mers (instead of 31-mers):
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result -k 20
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result -k 20
 ```
 ##### To request the full mode:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 0
 ```
 
 ##### To classify in full mode multiple sample files (single-end reads):
 ```
-$ ./classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0
+$ scripts/classify_metagenome.sh -O ./samples.txt -R ./samples.txt -m 0
 ```
 
 where, the file "samples.txt" contains the addresses of all the sample files to be run:
@@ -1022,7 +1029,7 @@ $ cat samples.txt
 
 ##### To classify in full mode multiple sample files (paired-end reads):
 ```
-$ ./classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0
+$ scripts/classify_metagenome.sh -O ./samples.R.txt ./samples.L.txt -R ./samples.R.txt -m 0
 ```
 
 where, files "samples.R.txt" and "samples.L.txt" contain the addresses of all the fastq 
@@ -1046,63 +1053,63 @@ must be preserved in "samples.R.txt" and "samples.L.txt" .
 
 ##### To request the express mode, and 8 threads:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 2 -n 8
 ```
 
 ##### To request the full mode, with gzipped objects file, and using 8 threads:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped
+$ scripts/classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 0 -n 8 --gzipped
 ```
 
 Another example, in default mode, for classifying paired-end reads (./sample1.fastq 
 and ./sample2.fastq):
 ```
-$ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result
+$ scripts/classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result
 ```
 
 Notes:
 This script can run CLARK-l instead of CLARK, for workstations with limited RAM. 
 Then, the user can indicate it with the option  "--light". For example:
 ```
-$ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --light
+$ scripts/classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --light
 ```
 This script can run CLARK-S instead of CLARK, if the database files of discriminative
 of spaced k-mers have been built. To use CLARK-S, the option is "--spaced". 
 For example:
 ```
-$ ./classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced
+$ scripts/classify_metagenome.sh -P ./sample1.fastq ./sample2.fastq -R ./result --spaced
 ```
 
 ##### To run CLARK-S with full mode and using 8 threads:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --gzipped --spaced
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result -m 0 -n 8 --gzipped --spaced
 ```
 
 ##### To run CLARK-S with express mode and using 8 threads on a gzipped file:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced
+$ scripts/classify_metagenome.sh -O ./sample.fa.gz -R ./result -m 2 -n 8 --spaced
 ```
 
 If you want to run CLARK-S but with a much lower RAM usage then you can decide
 to download only half the discriminative spaced k-mers in memory using "-s 2".
 For example:
 ```
-$ ./classify_metagenome.sh -O ./sample.fa -R ./result --spaced -s 2
+$ scripts/classify_metagenome.sh -O ./sample.fa -R ./result --spaced -s 2
 ```
 
 Note:
-run "./classify_metagenome.sh" in the terminal to prompt the help/usage describing 
+run "scripts/classify_metagenome.sh" in the terminal to prompt the help/usage describing
 options and parameters.
 
 
 ### Abundance estimation
 
-The script "estimate_abundance.sh" can analyze CLARK results of a metagenomic sample, 
+The script "scripts/estimate_abundance.sh" can analyze CLARK results of a metagenomic sample,
 and can provide for each target identified, its scientific name, taxonomy id, lineage 
 (superkingdom, phylum, class, order, family, genus), its count and proportion of objects 
 assigned to it. This script also allows to apply some filtering conditions (based on
  the confidence score or gamma score of assignments) to obtain a stricter estimation.
-The output format of estimate_abundance.sh is CSV.
+The output format of scripts/estimate_abundance.sh is CSV.
 
 For example, say a metagenomic sample contains 100 reads, results by CLARK (full mode) 
 indicates that 20 reads (20\%) are assigned to the target T1, 70 (70\%) are assigned 
@@ -1114,7 +1121,7 @@ We give below examples of command lines.
 
 Parameters and options of this script are:
 ```
-$ estimate_abundance.sh -c <minConfidenceScore> -g <minGamma> -D <Directory_Path> -F <result1>.csv <result2>.csv ... <result_n>.csv -a <minAbundance> ... 
+$ scripts/estimate_abundance.sh -c <minConfidenceScore> -g <minGamma> -D <Directory_Path> -F <result1>.csv <result2>.csv ... <result_n>.csv -a <minAbundance> ...
 ```
 Definition of parameters: 
 
@@ -1137,7 +1144,7 @@ Definition of parameters:
                            The default value is 0.
 
 -D \<Directory_Path\>    	   The directory path of the database (the same you indicated when calling 
-			   set_targets.sh). This parameter is required to load scientific names of 
+			   scripts/set_targets.sh). This parameter is required to load scientific names of
 			   all targets ONLY if you pass results of a metagenomic sample.
 
 -F \<result1\>.csv ... \<result_n\>.csv	 results file or list of results files produced by CLARK.
@@ -1173,31 +1180,31 @@ Definition of parameters:
 
 i) To get the abundance estimation of the results file, ./result.csv:
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/>
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/>
 ```
-where <DIR_PATH> is the directory of the database you have set with set_targets.sh.
+where <DIR_PATH> is the directory of the database you have set with scripts/set_targets.sh.
 
 To store its output in a file (e.g., "abundance.csv"), you can do by:
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> > abundance.csv
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> > abundance.csv
 ```
 ii) To filter high confidence assignments for the abundance estimation (i.e., 
 low confidence assignments will then be reported in the UNKNOWN category):
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> --highconfidence
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> --highconfidence
 ```
 iii) To filter assignnments by using a certain confidence score threshold 
 (for example, 0.8) :
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -c 0.80
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -c 0.80
 ```
 To filter assignnments using a gamma score threshold (for example, -g 0.03)
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03
 ```
 To output the results of the previous command in the mpa format:
 ```
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03 --mpa
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -g 0.03 --mpa
 ```
 Note:
 Filtering based on the confidence score and/or gamma on a results file is possible
@@ -1217,18 +1224,18 @@ abundances by setting a minimum abundance percentage.
 
 For example, to print out abundances higher than 2% only, then:
 
-$ ./estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -a 2
+$ scripts/estimate_abundance.sh -F ./result.csv -D <DIR_DB/> -a 2
 
 Finally, you can pass several results files at the same time:
 
-$ ./estimate_abundance.sh -F ./result1.csv ./result2.csv ...  -D <DIR_DB/>
+$ scripts/estimate_abundance.sh -F ./result1.csv ./result2.csv ...  -D <DIR_DB/>
 
 In that case, to assure consistency, the results files SHOULD be produced by 
 the same mode (see parameters and options above). Results from different
 modes of execution SHOULD NOT be mixed.
 
 We also remind the user that another script manipulating results files
-is offered, "evaluate_density_confidence.sh" (resp. "evaluate_density_gamma.sh"). 
+is offered, "scripts/evaluate_density_confidence.sh" (resp. "scripts/evaluate_density_gamma.sh").
 This script estimates and plots the density of assignments per confidence score 
 (resp. gamma score). It takes in input results file(s) produced 
 in the full/spectrum mode only.
@@ -1272,6 +1279,8 @@ In the default or express mode, the results format is the following for each lin
 
 ## VERSIONS
 
+Version 1.4.1.0-a	June 20, 2026.
+
 version 1.3.0.0		May 16, 2024
 
 Version 1.2.6.1		May 11, 2019.
@@ -1309,5 +1318,3 @@ Version 1.0.  		September 01, 2014.
 
 For any feedback, suggestion, or question, please feel free to contact Rachid Ounit 
 (clark.ucr.help at gmail.com).
-
-

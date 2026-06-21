@@ -24,54 +24,62 @@
 #
 
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ ! -s "$LDIR/.dbAddress" ]; then
-echo "Please run the script set_targets.sh to define the targets."
+echo "Please run scripts/set_targets.sh to define the targets."
 exit
 fi
 
 DIR=""
-for db in `cat $LDIR/.dbAddress`
+while IFS= read -r db || [ -n "$db" ]
 do
+[ -n "$db" ] || continue
 DIR="$db"
-done
+done < "$LDIR/.dbAddress"
 
-if [ ! -s $DIR/db_central_k31_t*_s1610612741_m0.tsk.sz ]; then
+set -- "$DIR"/db_central_k31_t*_s1610612741_m0.tsk.sz
+if [ ! -s "$1" ]; then
 echo "Failed to find the database of discriminative 31-mers."
 exit
 fi
 
-if [ -s $DIR/T295/db_central_k31_t*_s1610612741_m0_w22.tsk.sz ]; then
+set -- "$DIR"/T295/db_central_k31_t*_s1610612741_m0_w22.tsk.sz
+if [ -s "$1" ]; then
 echo "Database for the first spaced seed (code name:T295) already exists."
 else
 
-$LDIR/exe/converter $DIR/db_central_k31*m0.tsk.sz 22 31 T295
-if [ ! -d $DIR/T295 ]; then 
-	mkdir $DIR/T295/
+set -- "$DIR"/db_central_k31*m0.tsk.sz
+"$LDIR/exe/converter" "$1" 22 31 T295
+if [ ! -d "$DIR/T295" ]; then
+	mkdir "$DIR/T295/"
 fi
-mv $DIR/db_central_k31_t*_s1610612741_m0_w22.tsk.* $DIR/T295/
+mv "$DIR"/db_central_k31_t*_s1610612741_m0_w22.tsk.* "$DIR/T295/"
 fi
 
 
-if [ -s $DIR/T58570/db_central_k31_t*_s1610612741_m0_w22.tsk.sz ]; then
+set -- "$DIR"/T58570/db_central_k31_t*_s1610612741_m0_w22.tsk.sz
+if [ -s "$1" ]; then
 echo "Database for the second spaced seed (code name:T58570) already exists."
 else
-$LDIR/exe/converter $DIR/db_central_k31*m0.tsk.sz 22 31 T58570
-if [ ! -d $DIR/T58570 ]; then
-        mkdir $DIR/T58570/
+set -- "$DIR"/db_central_k31*m0.tsk.sz
+"$LDIR/exe/converter" "$1" 22 31 T58570
+if [ ! -d "$DIR/T58570" ]; then
+        mkdir "$DIR/T58570/"
 fi
-mv $DIR/db_central_k31_t*_s1610612741_m0_w22.tsk.* $DIR/T58570/
+mv "$DIR"/db_central_k31_t*_s1610612741_m0_w22.tsk.* "$DIR/T58570/"
 fi
 
-if [ -s $DIR/T38570/db_central_k31_t*_s1610612741_m0_w22.tsk.sz ]; then
+set -- "$DIR"/T38570/db_central_k31_t*_s1610612741_m0_w22.tsk.sz
+if [ -s "$1" ]; then
 echo "Database for the third spaced seed (code name:T38570) already exists."
 else
-$LDIR/exe/converter $DIR/db_central_k31*m0.tsk.sz 22 31 T38570
-if [ ! -d $DIR/T38570 ]; then
-        mkdir $DIR/T38570/
+set -- "$DIR"/db_central_k31*m0.tsk.sz
+"$LDIR/exe/converter" "$1" 22 31 T38570
+if [ ! -d "$DIR/T38570" ]; then
+        mkdir "$DIR/T38570/"
 fi
-mv $DIR/db_central_k31_t*_s1610612741_m0_w22.tsk.* $DIR/T38570/
+mv "$DIR"/db_central_k31_t*_s1610612741_m0_w22.tsk.* "$DIR/T38570/"
 fi
 
 

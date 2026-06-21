@@ -36,6 +36,7 @@
 #include <fstream>
 #include <string>
 #include <map>
+#include <sstream>
 
 #include "file.hh"
 #include "parameters.hh"
@@ -99,14 +100,19 @@ int main(int argc, char** argv)
 		fclose(fd);
 		std::cerr << db.size() << " targets id identified." << endl;
 		countKmers.resize(db.size(),0);
-		char * flblname = (char*) calloc(10000, sizeof(char));
-		sprintf(flblname,"%s/db_central_k%lu_t%lu_s%lu_m%lu.tsk.lb",predbfile.c_str(), m_km, (size_t) db.size(),(size_t) HTSIZE,(size_t) minCt);
+		ostringstream flblnameBuilder;
+		flblnameBuilder << predbfile << "/db_central_k" << m_km
+			<< "_t" << (size_t) db.size()
+			<< "_s" << (size_t) HTSIZE
+			<< "_m" << (size_t) minCt
+			<< ".tsk.lb";
+		string flblname = flblnameBuilder.str();
 		///////////////////////////////////////////////////////////////////////////
 
-		FILE * flabel = fopen(flblname,"r");
+		FILE * flabel = fopen(flblname.c_str(),"r");
 
 		if (flabel == NULL)
-		{       cerr << "Failed to open " <<  flabel << endl;
+		{       cerr << "Failed to open " <<  flblname << endl;
 			exit(1);
 		}
 		size_t _k = m_km, kc = 0;

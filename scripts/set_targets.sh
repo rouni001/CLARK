@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
 	cat <<'USAGE'
-Usage: ./set_targets.sh <Directory_path> <database choice...> [taxonomy rank]
+Usage: scripts/set_targets.sh <Directory_path> <database choice...> [taxonomy rank]
 
 Database choices:
   bacteria viruses plasmid plastid protozoa fungi human custom
@@ -47,7 +47,7 @@ if [ "$#" -lt 2 ]; then
 	exit 1
 fi
 
-DBDR="$1"
+DBDR_INPUT="$1"
 shift
 RANK=0
 DATABASES=()
@@ -68,8 +68,10 @@ done
 
 [ "${#DATABASES[@]}" -gt 0 ] || die "choose at least one database"
 
-LDIR="${CLARK_HOME:-$(script_dir)}"
-mkdir -p "$DBDR"
+SCRIPT_DIR="$(script_dir)"
+LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
+mkdir -p "$DBDR_INPUT" || die "failed to create database directory '$DBDR_INPUT'"
+DBDR="$(cd -P "$DBDR_INPUT" >/dev/null 2>&1 && pwd)" || die "failed to resolve database directory '$DBDR_INPUT'"
 
 echo "$DBDR" > "$LDIR/.DBDirectory"
 : > "$DBDR/targets.txt"
@@ -78,7 +80,7 @@ rm -f "$DBDR/.tmp" "$LDIR/.settings" "$LDIR/files_excluded.txt" "$DBDR/files_exc
 subDB=""
 for db in "${DATABASES[@]}"; do
 	echo -n "Collecting metadata of $db... "
-	"$LDIR/make_metadata.sh" "$db" "$DBDR"
+	"$LDIR/scripts/make_metadata.sh" "$db" "$DBDR"
 	[ -s "$DBDR/.$db" ] || die "metadata list for '$db' was not created"
 	[ -f "$DBDR/.taxondata" ] || die "taxonomy data is missing in '$DBDR'"
 	echo "done."

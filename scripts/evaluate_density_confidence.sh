@@ -18,16 +18,17 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
-#   extractSequences: To extract sequences from the input data that mapped 
-#		      to a specified taxon.
+#   evaluate_confidenceDensity: To evaluate and plot the density of assignments 
+#                               per confidence score in one or several results files.
 #
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 3 ]; then
-$LDIR/exe/extractSeqs
+if [ $# -lt 1 ]; then
+
+echo "Usage: $0 <result1>.csv  <result2>.csv ..."
+echo "Results file(s) must contain confidence scores."
 exit
 fi
 
-$LDIR/exe/extractSeqs $@
-
+"$LDIR/exe/getConfidenceDensity" "$@"

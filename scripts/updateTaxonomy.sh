@@ -1,8 +1,8 @@
-#! /bin/sh
+#!/bin/sh
 
-#
-# CLARK, CLAssifier based on Reduced K-mers.
-#
+# 
+#   CLARK, CLAssifier based on Reduced K-mers.
+# 
 #
 #   This program is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -19,21 +19,20 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
+#   updateTaxonomy.sh: To download latest files of taxonomy tree data from NCBI site. 
 #
-#
-#  @author: Rachid Ounit, Ph.D.
-#  @project: CLARK, Metagenomic and Genomic Sequences Classification project.
-#  @note: C++/Shell IMPLEMENTATION supported on latest Linux and Mac OS.
-#  makeSummaryTable.sh: To get summary tables indicating, the number of reads,
-#			the number of assigned reads, and the top organisms
-#			given for each CLARK report file (produced by 
-#			estimate_abundance.sh) passed in parameters.
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 1 ]; then
-echo -n "Usage: "
-$LDIR/exe/makeSummaryTables 
-exit
+if [ ! -s "$LDIR/.DBDirectory" ]; then
+	echo "Error: no CLARK database directory is configured." >&2
+	echo "Run scripts/set_targets.sh first to select or create a database directory." >&2
+	exit 1
 fi
-$LDIR/exe/makeSummaryTables $@
+
+while IFS= read -r DIR || [ -n "$DIR" ]
+do
+[ -n "$DIR" ] || continue
+"$LDIR/scripts/download_taxondata.sh" "$DIR/taxonomy"
+
+done < "$LDIR/.DBDirectory"

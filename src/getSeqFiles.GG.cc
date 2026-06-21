@@ -30,6 +30,7 @@
 #include <vector>
 #include <cstring>
 #include <iomanip>
+#include <sstream>
 #include <stdint.h>
 #include <time.h>
 #include "./file.hh"
@@ -57,7 +58,6 @@ int main(int argc, const char** argv)
 	sep.push_back('>');
 
 	FILE * sfd = NULL;
-	char tab[10000];
 	int t = 1;
 	srand(time(NULL));
 	int r = rand();
@@ -71,8 +71,10 @@ int main(int argc, const char** argv)
 			getElementsFromLine(line, sep, ele);
 			if (ele.size() < 3)
 			{	cerr << "Warning with OTU: " << line << endl; }
-			sprintf(tab,"%s/%s-%s-%s-%i-%i.fa", argv[2],ele[0].c_str(), ele[1].c_str(),ele[ele.size()-1].c_str(),r, t);
-			sfd = fopen(tab,"w");
+			ostringstream outFile;
+			outFile << argv[2] << "/" << ele[0] << "-" << ele[1] << "-" << ele[ele.size()-1] << "-" << r << "-" << t << ".fa";
+			const string outFileName = outFile.str();
+			sfd = fopen(outFileName.c_str(),"w");
 			t++;
 		}
 		fprintf(sfd, "%s\n", line.c_str());
@@ -80,4 +82,3 @@ int main(int argc, const char** argv)
 	fclose(fd);
 	return 0;
 }
-

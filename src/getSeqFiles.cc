@@ -30,6 +30,7 @@
 #include <vector>
 #include <cstring>
 #include <iomanip>
+#include <sstream>
 #include <stdint.h>
 #include <time.h>
 #include "./file.hh"
@@ -57,7 +58,6 @@ int main(int argc, const char** argv)
 	sep.push_back('>');
 
 	FILE * sfd = NULL;
-	char tab[10000];
 	int t = 1;
 	srand(time(NULL));
 	int r = rand();
@@ -69,8 +69,10 @@ int main(int argc, const char** argv)
 			{	fclose(sfd);	}
 			ele.clear();
 			getElementsFromLine(line, sep, ele);
-			sprintf(tab,"%s/%s.%i.%i.fa", argv[2],ele[0].c_str(), r, t);
-			sfd = fopen(tab,"w");
+			ostringstream outFile;
+			outFile << argv[2] << "/" << ele[0] << "." << r << "." << t << ".fa";
+			const string outFileName = outFile.str();
+			sfd = fopen(outFileName.c_str(),"w");
 			t++;
 		}
 		fprintf(sfd, "%s\n", line.c_str());
@@ -78,4 +80,3 @@ int main(int argc, const char** argv)
 	fclose(fd);
 	return 0;
 }
-

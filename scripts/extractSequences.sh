@@ -1,7 +1,6 @@
-#! /bin/sh
-
+#!/bin/sh
 #
-# CLARK, CLAssifier based on Reduced K-mers.
+#   CLARK, CLAssifier based on Reduced K-mers.
 #
 #
 #   This program is free software: you can redistribute it and/or modify
@@ -19,22 +18,15 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
+#   extractSequences: To extract sequences from the input data that mapped 
+#		      to a specified taxon.
 #
-#  @author: Rachid Ounit, Ph.D.
-#  @project: CLARK, Metagenomic and Genomic Sequences Classification project.
-#  @note: C++/Shell IMPLEMENTATION supported on latest Linux and Mac OS.
-#  estimate_abundance.sh: To estimate abundance of target identified (reported
-#			  by taxa name and lineage) with count and proportion 
-#			  (against all reads or classified reads). 
-#			  Filtering options are offered.
-# 
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 1 ]; then
-echo -n "Usage: $0 " 
-$LDIR/exe/getAbundance
+if [ $# -lt 3 ]; then
+"$LDIR/exe/extractSeqs"
 exit
 fi
-$LDIR/exe/getAbundance $@
 
+"$LDIR/exe/extractSeqs" "$@"

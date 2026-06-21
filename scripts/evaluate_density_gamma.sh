@@ -1,7 +1,6 @@
-#! /bin/sh
-
+#!/bin/sh
 #
-# CLARK, CLAssifier based on Reduced K-mers.
+#   CLARK, CLAssifier based on Reduced K-mers.
 #
 #
 #   This program is free software: you can redistribute it and/or modify
@@ -19,22 +18,17 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
+#   evaluate_GammaDensity: To evaluate and plot the density of assignments 
+#                               per Gamma score in one or several results files.
 #
-#
-#  @author: Rachid Ounit, Ph.D.
-#  @project: CLARK, Metagenomic and Genomic Sequences Classification project.
-#  @note: C++/Shell IMPLEMENTATION supported on latest Linux and Mac OS.
-#  getTargetsKmers_distribution.sh: To estimate abundance of target identified (reported
-#			  by taxa name and lineage) with count and proportion 
-#			  (against all reads or classified reads). 
-#			  Filtering options are offered.
-# 
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 2 ]; then
-echo "Usage: $0 <k-mer length: integer between 2 and 32> <min k-mers frequency: default is 0>"
+if [ $# -lt 1 ]; then
+
+echo "Usage: $0 <result1>.csv  <result2>.csv ..."
+echo "Results file(s) must contain Gamma scores."
 exit
 fi
-$LDIR/exe/getTargetSpecificKmersStat $LDIR/.settings $@
 
+"$LDIR/exe/getGammaDensity" "$@"

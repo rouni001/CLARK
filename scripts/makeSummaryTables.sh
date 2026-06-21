@@ -1,6 +1,7 @@
-#!/bin/sh
+#! /bin/sh
+
 #
-#   CLARK, CLAssifier based on Reduced K-mers.
+# CLARK, CLAssifier based on Reduced K-mers.
 #
 #
 #   This program is free software: you can redistribute it and/or modify
@@ -18,18 +19,21 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
-#   evaluate_confidenceDensity: To evaluate and plot the density of assignments 
-#                               per confidence score in one or several results files.
 #
+#
+#  @author: Rachid Ounit, Ph.D.
+#  @project: CLARK, Metagenomic and Genomic Sequences Classification project.
+#  @note: C++/Shell IMPLEMENTATION supported on latest Linux and Mac OS.
+#  makeSummaryTable.sh: To get summary tables indicating, the number of reads,
+#			the number of assigned reads, and the top organisms
+#			given for each CLARK report file (produced by 
+#			estimate_abundance.sh) passed in parameters.
 
-LDIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
 if [ $# -lt 1 ]; then
-
-echo "Usage: $0 <result1>.csv  <result2>.csv ..."
-echo "Results file(s) must contain confidence scores."
+echo -n "Usage: "
+"$LDIR/exe/makeSummaryTables"
 exit
 fi
-
-$LDIR/exe/getConfidenceDensity $@
-
+"$LDIR/exe/makeSummaryTables" "$@"

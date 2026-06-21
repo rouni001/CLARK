@@ -27,35 +27,38 @@ echo "Usage: $0 <Directory for the sequences> <Database: bacteria, viruses, plas
 exit
 fi
 
-DIR=$(CDPATH= cd "$(dirname "$0")" && pwd -P)
+DIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
+DBDR="$1"
+DB="$2"
 
-if [ "$2" = "bacteria" ]; then
+if [ "$DB" = "bacteria" ]; then
 
-	if [ ! -s $1/.bacteria ]; then
-		rm -Rf $1/Bacteria $1/.bacteria.*
-		mkdir -m 775 $1/Bacteria
-		cd $1/Bacteria/
+	if [ ! -s "$DBDR/.bacteria" ]; then
+		rm -Rf "$DBDR/Bacteria" "$DBDR"/.bacteria.*
+		mkdir -m 775 "$DBDR/Bacteria"
+		cd "$DBDR/Bacteria/" || exit
 		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
-		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
+		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
 		chmod 711 ./download.sh
 		echo "Downloading now Bacteria/Archaea complete genomes (quiet mode)... [This operation will take several hours or more to complete.]"
-		./download.sh 2> .$2.tmp
+		./download.sh 2> ".$DB.tmp"
 		rm -f ./assembly_summary.txt
 	
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/archaea/assembly_summary.txt > .$2.tmp
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp 
-		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
-		./download.sh 2> .$2.tmp
-		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/archaea/assembly_summary.txt > ".$DB.tmp"
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
+		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
+		./download.sh 2> ".$DB.tmp"
+		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
 
 		echo "Downloading done! Uncompressing files... "
-		find `pwd` -iname "*fna.gz" > ./bacteria.gz.list.txt
-		for gzipped_bacteria_file in `cat ./bacteria.gz.list.txt`
+		find "$(pwd)" -iname "*fna.gz" > ./bacteria.gz.list.txt
+		while IFS= read -r gzipped_bacteria_file || [ -n "$gzipped_bacteria_file" ]
 		do
-			gunzip $gzipped_bacteria_file
-		done
-		find `pwd` -name '*.fna' > ../.bacteria
+			[ -n "$gzipped_bacteria_file" ] || continue
+			gunzip "$gzipped_bacteria_file"
+		done < ./bacteria.gz.list.txt
+		find "$(pwd)" -name '*.fna' > ../.bacteria
 		cd ..
 		if  [ ! -s .bacteria ]; then
 			echo "Error: Failed to download bacteria sequences. "
@@ -63,32 +66,33 @@ if [ "$2" = "bacteria" ]; then
 		fi
 		echo "Bacteria/Archaea sequences downloaded!"
 	else
-		echo "Bacteria/Archaea sequences already in $1."
+		echo "Bacteria/Archaea sequences already in $DBDR."
 	fi
 	exit
 fi
 
-if [ "$2" = "viruses" ]; then
-	if [ ! -s $1/.viruses ]; then
-		rm -Rf $1/Viruses  $1/.viruses.*
-		mkdir -m 775 $1/Viruses
-		cd $1/Viruses/
+if [ "$DB" = "viruses" ]; then
+	if [ ! -s "$DBDR/.viruses" ]; then
+		rm -Rf "$DBDR/Viruses" "$DBDR"/.viruses.*
+		mkdir -m 775 "$DBDR/Viruses"
+		cd "$DBDR/Viruses/" || exit
 		echo "Downloading now Viruses complete genomes:"
 		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/viral/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
-		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
+		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
 		chmod 711 ./download.sh
-		./download.sh 2> .$2.tmp
+		./download.sh 2> ".$DB.tmp"
 		echo "Downloading done. Uncompressing files... "
-		find `pwd` -name '*.gz' > ./virus.gz.list.txt
-		for gzipped_virus_file in `cat ./virus.gz.list.txt`
+		find "$(pwd)" -name '*.gz' > ./virus.gz.list.txt
+		while IFS= read -r gzipped_virus_file || [ -n "$gzipped_virus_file" ]
 		do
-			gunzip $gzipped_virus_file
-		done
+			[ -n "$gzipped_virus_file" ] || continue
+			gunzip "$gzipped_virus_file"
+		done < ./virus.gz.list.txt
 		rm -f ./virus.gz.list.txt
-		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
 
-		find `pwd` -name '*.fna'  > ../.viruses
+		find "$(pwd)" -name '*.fna'  > ../.viruses
 		cd ..
 		if  [ ! -s .viruses ]; then
 			echo "Error: Failed to download viruses sequences. "
@@ -96,16 +100,16 @@ if [ "$2" = "viruses" ]; then
 		fi
 		echo "Viruses sequences downloaded!"
 	else
-		echo "Viruses sequences already in $1."
+		echo "Viruses sequences already in $DBDR."
 	fi
 	exit
 fi
 
-if [ "$2" = "plasmid" ]; then
-        if [ ! -s $1/.plasmid ]; then
-			rm -Rf $1/Plasmid  $1/.plasmid.*
-			mkdir -m 775 $1/Plasmid
-			cd $1/Plasmid/
+if [ "$DB" = "plasmid" ]; then
+        if [ ! -s "$DBDR/.plasmid" ]; then
+			rm -Rf "$DBDR/Plasmid" "$DBDR"/.plasmid.*
+			mkdir -m 775 "$DBDR/Plasmid"
+			cd "$DBDR/Plasmid/" || exit
 			echo "Downloading now Plasmid genomes:"
 			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.1.1.genomic.fna.gz
 			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.2.1.genomic.fna.gz
@@ -119,10 +123,10 @@ if [ "$2" = "plasmid" ]; then
 			echo " * Processing sequences..."
 			for file in `ls ./*fna`
 				do
-					$DIR/exe/exeSeq $file ./
+					"$DIR/exe/exeSeq" "$file" ./
 				done
 			rm -f ./plasmid*.genomic.fna.gz
-			find `pwd` -name '*.fa'  > ../.plasmid
+			find "$(pwd)" -name '*.fa'  > ../.plasmid
 			cd ..
 			if  [ ! -s .plasmid ]; then
 				echo "Error: Failed to download plasmid sequences. "
@@ -130,16 +134,16 @@ if [ "$2" = "plasmid" ]; then
 			fi
 			echo "Plasmid sequences downloaded!"
         else
-			echo "Plasmid sequences already in $1."
+			echo "Plasmid sequences already in $DBDR."
         fi
         exit
 fi
 
-if [ "$2" = "plastid" ]; then
-        if [ ! -s $1/.plastid ]; then
-			rm -Rf $1/Plastid  $1/.plastid.*
-			mkdir -m 775 $1/Plastid
-			cd $1/Plastid/
+if [ "$DB" = "plastid" ]; then
+        if [ ! -s "$DBDR/.plastid" ]; then
+			rm -Rf "$DBDR/Plastid" "$DBDR"/.plastid.*
+			mkdir -m 775 "$DBDR/Plastid"
+			cd "$DBDR/Plastid/" || exit
 			echo "Downloading now Plastid genomes:"
 			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plastid/plastid.1.1.genomic.fna.gz
 			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plastid/plastid.2.1.genomic.fna.gz
@@ -149,10 +153,10 @@ if [ "$2" = "plastid" ]; then
 			echo " * Processing sequences..."
 			for file in `ls ./*fna`
 			do
-					$DIR/exe/exeSeq $file ./
+					"$DIR/exe/exeSeq" "$file" ./
 			done
 			rm -f ./plastid*.genomic.fna.gz
-			find `pwd` -name '*.fa'  > ../.plastid
+			find "$(pwd)" -name '*.fa'  > ../.plastid
 			cd ..
 			if  [ ! -s .plastid ]; then
 					echo "Error: Failed to download plastid sequences. "
@@ -160,23 +164,23 @@ if [ "$2" = "plastid" ]; then
 			fi
 			echo "Plastid sequences downloaded!"
         else
-			echo "Plastid sequences already in $1."
+			echo "Plastid sequences already in $DBDR."
         fi
         exit
 fi
 
-if [ "$2" = "fungi" ]; then
-	if [ ! -s $1/.fungi ]; then
-		rm -Rf $1/Fungi  $1/.fungi.*
-		mkdir -m 775 $1/Fungi
-		cd $1/Fungi/
+if [ "$DB" = "fungi" ]; then
+	if [ ! -s "$DBDR/.fungi" ]; then
+		rm -Rf "$DBDR/Fungi" "$DBDR"/.fungi.*
+		mkdir -m 775 "$DBDR/Fungi"
+		cd "$DBDR/Fungi/" || exit
 		echo "Downloading now RefSeq fungi complete genomes:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$2/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
-		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
+		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$DB/assembly_summary.txt
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
+		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
 		chmod 711 ./download.sh
-		./download.sh  2> .$2.tmp
-		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		./download.sh  2> ".$DB.tmp"
+		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
 
         echo "Downloading now a list of 47 fungi reference genomes..."
 #Blastomyces dermatitidis
@@ -276,7 +280,7 @@ if [ "$2" = "fungi" ]; then
 		echo "Downloading done. Uncompressing files... "
 		gunzip ./*fna.gz
 
-		find `pwd` -name '*.fna' > ../.fungi
+		find "$(pwd)" -name '*.fna' > ../.fungi
 	  	cd ../
 	  	if  [ ! -s .fungi ]; then
 	  		echo "Error: Failed to download fungi sequences. "
@@ -284,27 +288,27 @@ if [ "$2" = "fungi" ]; then
 	  	fi
 	  	echo "Fungi sequences downloaded!"
 	else
-	  	echo "Fungi sequences already in $1."
+		echo "Fungi sequences already in $DBDR."
 	fi
 	exit
 fi
 
-if [ "$2" = "protozoa" ]; then
-	if [ ! -s $1/.protozoa ]; then
-		rm -Rf $1/Protozoa  $1/.protozoa.*
-		mkdir -m 775 $1/Protozoa
-		cd $1/Protozoa/
+if [ "$DB" = "protozoa" ]; then
+	if [ ! -s "$DBDR/.protozoa" ]; then
+		rm -Rf "$DBDR/Protozoa" "$DBDR"/.protozoa.*
+		mkdir -m 775 "$DBDR/Protozoa"
+		cd "$DBDR/Protozoa/" || exit
 		echo "Downloading now RefSeq protozoa complete genomes:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$2/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > .$2.tmp
-		$DIR/exe/dscriptMaker .$2.tmp > ./download.sh
+		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$DB/assembly_summary.txt
+		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
+		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
 		chmod 711 ./download.sh
-		./download.sh 2> .$2.tmp
-		rm -f .$2.tmp ./download.sh ./assembly_summary.txt
+		./download.sh 2> ".$DB.tmp"
+		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
 		echo "Downloading done. Uncompressing files... "
 		gunzip ./*fna.gz
 
-		find `pwd` -name '*.fna' > ../.protozoa
+		find "$(pwd)" -name '*.fna' > ../.protozoa
 		cd ../
 		if  [ ! -s .protozoa ]; then
 				echo "Error: Failed to download protozoa sequences. "
@@ -312,22 +316,22 @@ if [ "$2" = "protozoa" ]; then
 		fi
 		echo "Protozoa sequences downloaded!"
 	else
-		echo "Protozoa sequences already in $1."
+		echo "Protozoa sequences already in $DBDR."
 	fi
 	exit
 fi
 
-if [ "$2" = "human" ]; then
-	if [ ! -s $1/.human ]; then
-		rm -Rf $1/Human  $1/.human.*
-		mkdir -m 775 $1/Human
-		cd $1/Human/
+if [ "$DB" = "human" ]; then
+	if [ ! -s "$DBDR/.human" ]; then
+		rm -Rf "$DBDR/Human" "$DBDR"/.human.*
+		mkdir -m 775 "$DBDR/Human"
+		cd "$DBDR/Human/" || exit
 		echo "Downloading now latest Human genome:"
 		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.fna.gz
 		echo "Downloading done. Uncompressing files... "
 	  	gunzip ./*fna.gz
 
-	  	find `pwd` -name '*.fna' > ../.human
+		find "$(pwd)" -name '*.fna' > ../.human
 	  	cd ../
 	  	if  [ ! -s .human ]; then
 	  		echo "Error: Failed to download human sequences. "
@@ -335,9 +339,9 @@ if [ "$2" = "human" ]; then
 	  	fi
 	  	echo "Human genome downloaded!"
 	else
-		echo "Human genome already in $1."
+		echo "Human genome already in $DBDR."
 	fi
 	exit
 fi
 
-echo "Failed to recognize parameter: $2. Please choose between: bacteria, viruses, plasmid, plastid, protozoa, fungi or human."
+echo "Failed to recognize parameter: $DB. Please choose between: bacteria, viruses, plasmid, plastid, protozoa, fungi or human."

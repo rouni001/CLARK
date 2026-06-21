@@ -373,10 +373,9 @@ int main(int argc, char** argv)
 		vector<char> sepc;
 		sepc.push_back('\t');
 		vector<string> elec;
-		char * filename= (char*) calloc(MXNMLEN,sizeof(char));
-		sprintf(filename,"%s/taxonomy/nodes.dmp", argv[i_names]);
+		string filename = string(argv[i_names]) + "/taxonomy/nodes.dmp";
 		vector<node> nodes;
-		getNodes(filename,nodes);
+		getNodes(filename.c_str(),nodes);
 		vector<node> lineage;
 		lineages.resize(dLabels.size());
 
@@ -407,8 +406,8 @@ int main(int argc, char** argv)
 		}
 		cerr << "done." << endl;
 
-		sprintf(filename,"%s/taxonomy/names.dmp", argv[i_names]);
-		FILE * fdn = fopen(filename, "r");
+		filename = string(argv[i_names]) + "/taxonomy/names.dmp";
+		FILE * fdn = fopen(filename.c_str(), "r");
 
 		if (fdn == NULL)
 		{	cerr << "Failed to open " << filename << endl;
@@ -443,8 +442,6 @@ int main(int argc, char** argv)
 			cerr << "done." << endl;
 			fclose(fdn);
 		}
-		free(filename);
-		filename=NULL;
 	}
 	vector<targetAbundance> res(dLabels.size());
 	for (size_t t= 0; t < dLabels.size(); t++)

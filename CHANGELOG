@@ -1,3 +1,5 @@
+06/20/2026  Version 1.4.1.0-a: 
+		Scripts and Repo reorganized. Bugfixes, code improvement included. Updating version.
 05/14/2024	Repo reorganized. Updating version and license terms.
 08/30/2019	Bug fix in ./extractSequences.sh for fasta files.
 05/11/2019	Version 1.2.6.1: The script "makeSummaryTable" was modified so a third table

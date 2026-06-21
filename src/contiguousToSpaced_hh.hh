@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <stdio.h>
 #include <cstring>
 
@@ -72,16 +73,13 @@ class contiguousTospaced
 	template <typename HKMERr, typename HKMERrs>
 void contiguousTospaced<HKMERr,HKMERrs>::populate(const char* _filename)
 {
-	char * file_lbl = (char*) calloc(strlen(_filename)+4,sizeof(char));
-	char * file_key = (char*) calloc(strlen(_filename)+4,sizeof(char));
-	char * file_sze = (char*) calloc(strlen(_filename)+4,sizeof(char));
+	const string file_lbl = string(_filename) + ".lb";
+	const string file_key = string(_filename) + ".ky";
+	const string file_sze = string(_filename) + ".sz";
 
-	sprintf(file_lbl, "%s.lb", _filename);
-	sprintf(file_key, "%s.ky", _filename);
-	sprintf(file_sze, "%s.sz", _filename);
-	FILE * fd_l = fopen(file_lbl,"r");
-	FILE * fd_k = fopen(file_key,"r");
-	FILE * fd_s = fopen(file_sze,"r");
+	FILE * fd_l = fopen(file_lbl.c_str(),"r");
+	FILE * fd_k = fopen(file_key.c_str(),"r");
+	FILE * fd_s = fopen(file_sze.c_str(),"r");
 
 #define LEN 100000
 
@@ -144,13 +142,6 @@ void contiguousTospaced<HKMERr,HKMERrs>::populate(const char* _filename)
 	fclose(fd_l);
 	fclose(fd_k);
 	fclose(fd_s);
-
-	free(file_lbl);
-	file_lbl=NULL;
-	free(file_key);
-	file_key=NULL;
-	free(file_sze);
-	file_sze=NULL;
 	std::cerr << nbElement << " contiguous k-mers were successfully processed. " << std::endl;
 }
 
@@ -195,12 +186,11 @@ bool contiguousTospaced<HKMERr,HKMERrs>::update(const uint64_t& _km, const ILBL&
 	template <typename HKMERr, typename HKMERrs>
 void contiguousTospaced<HKMERr,HKMERrs>::write(const char* _filename)
 {
-	char * newfilename = (char*) calloc(strlen(_filename)+5,sizeof(char));
-	for(size_t t = 0; t < strlen(_filename) - 4; t++)
-	{
-		newfilename[t] = _filename[t];
-	}
-	sprintf(newfilename, "%s_w%lu.tsk", newfilename, m_weight);
+	const string filename(_filename);
+	const string prefix = filename.size() > 4 ? filename.substr(0, filename.size()-4) : filename;
+	std::ostringstream newfilenameBuilder;
+	newfilenameBuilder << prefix << "_w" << m_weight << ".tsk";
+	const string newfilename = newfilenameBuilder.str();
 	m_sTable.sortall(2);
-	m_sTable.write(newfilename, 2, false);
+	m_sTable.write(newfilename.c_str(), 2, false);
 }

@@ -524,19 +524,16 @@ void CLARK<HKMERr>::run(const char* _pairedfile1, const char* _pairedfile2, cons
         m_isPaired 	= true;
         m_isExtended 	= _isExtended;
         string mode(_mode == 0 ? "Full": (_mode == 1? "Default" : (_mode == 2? "Express":"Spectrum")));
-	char * mergedFiles = NULL;
+	string mergedFiles;
         if (fd == NULL )
         {
 		// Merge _pairedfile1 + _pairedfile2
-		mergedFiles = (char *) calloc(strlen(_pairedfile1)+25, 1);
-                sprintf(mergedFiles,"%s_ConcatenatedByCLARK.fa",_pairedfile1);
-                mergePairedFiles(_pairedfile1, _pairedfile2, mergedFiles);
+		mergedFiles = string(_pairedfile1) + "_ConcatenatedByCLARK.fa";
+                mergePairedFiles(_pairedfile1, _pairedfile2, mergedFiles.c_str());
 		cerr << "Mode: " << mode<< ",\tProcessing file: " << mergedFiles << ",\t using "<< m_nbCPU << " CPU." <<  endl;
-                CLARK::runSimple(mergedFiles, _fileToResults, _mode, _minCountO, _spectrumAnalysis, _useWeight);
+                CLARK::runSimple(mergedFiles.c_str(), _fileToResults, _mode, _minCountO, _spectrumAnalysis, _useWeight);
 		// Delete file
-		deleteFile(mergedFiles);
-		free(mergedFiles);
-                mergedFiles = NULL;
+		deleteFile(mergedFiles.c_str());
                 return;
         }
         fclose(fd);
@@ -555,15 +552,12 @@ void CLARK<HKMERr>::run(const char* _pairedfile1, const char* _pairedfile2, cons
         if (line[0] == '>' || line[0] == '@' || ele.size() == 2)
         {
 		// Merge _pairedfile1 + _pairedfile2 
-                mergedFiles = (char *) calloc(strlen(_pairedfile1)+25, 1);
-                sprintf(mergedFiles,"%s_ConcatenatedByCLARK.fa",_pairedfile1);
-                mergePairedFiles(_pairedfile1, _pairedfile2, mergedFiles);
+                mergedFiles = string(_pairedfile1) + "_ConcatenatedByCLARK.fa";
+                mergePairedFiles(_pairedfile1, _pairedfile2, mergedFiles.c_str());
 		cerr << "Mode: " << mode<< ",\tProcessing file: " << mergedFiles << ",\t using "<< m_nbCPU << " CPU." <<  endl;
-                CLARK::runSimple(mergedFiles, _fileToResults, _mode, _minCountO, _spectrumAnalysis, _useWeight);
+                CLARK::runSimple(mergedFiles.c_str(), _fileToResults, _mode, _minCountO, _spectrumAnalysis, _useWeight);
 		// Delete file
-		deleteFile(mergedFiles);
-		free(mergedFiles);
-                mergedFiles = NULL;
+		deleteFile(mergedFiles.c_str());
                 return;
         }
         FILE * r_fd 	= fopen(_fileToResults, "r");
@@ -574,16 +568,13 @@ void CLARK<HKMERr>::run(const char* _pairedfile1, const char* _pairedfile2, cons
         while (getLineFromFile(o1_fd, o1_line) && getLineFromFile(o2_fd, o2_line) && getLineFromFile(r_fd, r_line))
         {
 		// Merge _pairedfile1 + _pairedfile2 
-		mergedFiles = (char *) calloc(strlen(o1_line.c_str())+25, 1);
-                sprintf(mergedFiles,"%s_ConcatenatedByCLARK.fa",o1_line.c_str());
-                mergePairedFiles(o1_line.c_str(), o2_line.c_str(), mergedFiles);
+		mergedFiles = o1_line + "_ConcatenatedByCLARK.fa";
+                mergePairedFiles(o1_line.c_str(), o2_line.c_str(), mergedFiles.c_str());
 
                 cerr << "> Processing file: " << mergedFiles <<  endl;
-                CLARK::runSimple(mergedFiles, r_line.c_str(), _mode, _minCountO, _spectrumAnalysis, _useWeight);
+                CLARK::runSimple(mergedFiles.c_str(), r_line.c_str(), _mode, _minCountO, _spectrumAnalysis, _useWeight);
 		// Delete file
-		deleteFile(mergedFiles);
-		free(mergedFiles);
-		mergedFiles = NULL;
+		deleteFile(mergedFiles.c_str());
         }
         fclose(r_fd);
         fclose(o1_fd);
@@ -828,7 +819,7 @@ void CLARK<HKMERr>::loadComputeObjectsSpectrumData()
 			std::cerr << "Database path is too long: " << dbname << std::endl;
 			exit(1);
 		}
-		strcpy(_dbname, dbname.c_str());
+		memcpy(_dbname, dbname.c_str(), dbname.size()+1);
 	}
 
 	template <typename HKMERr>

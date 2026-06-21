@@ -37,15 +37,29 @@ REQUIRED_EXECUTABLES=(
 
 test_shell_syntax() {
 	for script in \
-		"$REPO_DIR/install.sh" \
-		"$REPO_DIR/classify_metagenome.sh" \
-		"$REPO_DIR/set_targets.sh" \
-		"$REPO_DIR/make_metadata.sh" \
-		"$REPO_DIR/download_taxondata.sh" \
+		"$REPO_DIR/scripts/install.sh" \
+		"$REPO_DIR/scripts/classify_metagenome.sh" \
+		"$REPO_DIR/scripts/set_targets.sh" \
+		"$REPO_DIR/scripts/make_metadata.sh" \
+		"$REPO_DIR/scripts/download_taxondata.sh" \
 		"$REPO_DIR/tests/coverage_report.sh"; do
 		bash -n "$script"
 	done
+	for script in "$REPO_DIR"/scripts/*.sh; do
+		case "$(head -n 1 "$script")" in
+			*"bash"*) bash -n "$script" ;;
+			*) sh -n "$script" ;;
+		esac
+	done
 	pass "modern shell entrypoints parse"
+}
+
+test_no_root_shell_scripts() {
+	if find "$REPO_DIR" -maxdepth 1 -type f -name '*.sh' | grep -q .; then
+		find "$REPO_DIR" -maxdepth 1 -type f -name '*.sh' >&2
+		fail "root-level shell scripts remain; use scripts/ as the single script home"
+	fi
+	pass "repository root has no duplicated shell scripts"
 }
 
 test_required_executables() {
@@ -59,7 +73,7 @@ test_version_binaries() {
 	for binary in CLARK CLARK-l CLARK-S; do
 		version="$("$REPO_DIR/exe/$binary" --version)"
 		case "$version" in
-			*"Version: 1.3.0.0"*) ;;
+			*"Version: 1.4.1.0-a"*) ;;
 			*) fail "unexpected version output from $binary: $version" ;;
 		esac
 	done
@@ -134,7 +148,7 @@ test_classify_wrapper_quotes_paths() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" -m 2 -n 4
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" -m 2 -n 4
 
 	grep -Fq "arg=<$targets>" "$capture" || fail "target path with spaces was not preserved"
 	grep -Fq "arg=<$dbdir/>" "$capture" || fail "database path with spaces was not preserved"
@@ -166,7 +180,7 @@ test_classify_wrapper_gzip() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" --gzipped
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" --gzipped
 
 	grep -Fq "object-bytes=16" "$capture" || fail "gzipped input was not decompressed before classification"
 	if find "$tmp" -maxdepth 1 -type d -name 'CLARKGZP.*' | grep -q .; then
@@ -198,7 +212,7 @@ test_classify_wrapper_paired_light_variant() {
 	CLARK_SETTINGS_FILE="$settings" \
 	CLARK_EXE_DIR="$fake_exe" \
 	CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -P "$input1" "$input2" -R "$result" --light
+		"$REPO_DIR/scripts/classify_metagenome.sh" -P "$input1" "$input2" -R "$result" --light
 
 	grep -Fq "binary=CLARK-l" "$capture" || fail "--light did not select CLARK-l"
 	grep -Fq "arg=<$input1>" "$capture" || fail "paired input 1 path was not preserved"
@@ -229,10 +243,99 @@ test_classify_wrapper_rejects_conflicting_variants() {
 	if CLARK_SETTINGS_FILE="$settings" \
 		CLARK_EXE_DIR="$fake_exe" \
 		CLARK_TEST_CAPTURE="$capture" \
-		"$REPO_DIR/classify_metagenome.sh" -O "$input" -R "$result" --light --spaced >/dev/null 2>&1; then
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result" --light --spaced >/dev/null 2>&1; then
 		fail "classify wrapper accepted conflicting --light and --spaced options"
 	fi
 	pass "classify wrapper rejects conflicting variants"
+}
+
+test_scripts_directory_entrypoint() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-scripts-layout-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	settings="$tmp/settings"
+	targets="$tmp/targets.txt"
+	dbdir="$tmp/db"
+	input="$tmp/input.fastq"
+	result="$tmp/result.csv"
+	fake_exe="$tmp/fake-exe"
+	capture="$tmp/capture.txt"
+
+	mkdir -p "$dbdir"
+	printf 'target.fa 12345\n' > "$targets"
+	printf -- '-T %s\n-D %s\n' "$targets" "$dbdir/" > "$settings"
+	printf '@r1\nACGT\n+\n!!!!\n' > "$input"
+	create_fake_exe "$fake_exe"
+
+	CLARK_SETTINGS_FILE="$settings" \
+	CLARK_EXE_DIR="$fake_exe" \
+	CLARK_TEST_CAPTURE="$capture" \
+		"$REPO_DIR/scripts/classify_metagenome.sh" -O "$input" -R "$result"
+
+	grep -Fq "binary=CLARK" "$capture" || fail "scripts/ classify entrypoint did not run CLARK"
+	grep -Fq "arg=<$input>" "$capture" || fail "scripts/ classify entrypoint did not preserve input path"
+	pass "scripts directory entrypoints resolve the repository root"
+}
+
+test_set_targets_records_absolute_db_paths() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-set-targets-path-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake home"
+	dbdir_input="$tmp/db dir"
+
+	mkdir -p "$fake_home/scripts" "$fake_home/exe" "$dbdir_input/Custom" "$dbdir_input/taxonomy"
+	dbdir="$(cd -P "$dbdir_input" >/dev/null 2>&1 && pwd)"
+	ref="$dbdir/Custom/ref A.fa"
+	ln -s "$REPO_DIR/scripts/make_metadata.sh" "$fake_home/scripts/make_metadata.sh"
+	ln -s "$REPO_DIR/scripts/download_taxondata.sh" "$fake_home/scripts/download_taxondata.sh"
+	ln -s "$REPO_DIR/scripts/download_RefSeqDB.sh" "$fake_home/scripts/download_RefSeqDB.sh"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+
+	printf '>NC_000001.1 synthetic custom reference\nACGT\n' > "$ref"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+		"$ref" "111" "111" "222" "333" "444" "555" "666" \
+		> "$dbdir/.custom.fileToTaxIDs"
+	printf '%s\t%s\t%s\n' "$ref" "NC_000001.1" "111" > "$dbdir/.custom.fileToAccssnTaxID"
+	touch "$dbdir/.taxondata"
+
+	(
+		cd "$tmp"
+		CLARK_HOME="$fake_home" "$REPO_DIR/scripts/set_targets.sh" "db dir" custom --species >/dev/null
+	)
+
+	grep -Fq -- "-T $dbdir/targets.txt" "$fake_home/.settings" || fail "set_targets did not store an absolute targets path"
+	grep -Fq -- "-D $dbdir/custom_0/" "$fake_home/.settings" || fail "set_targets did not store an absolute database path"
+	[ "$(cat "$fake_home/.DBDirectory")" = "$dbdir" ] || fail ".DBDirectory did not record the absolute database directory"
+	[ "$(cat "$fake_home/.dbAddress")" = "$dbdir/custom_0" ] || fail ".dbAddress did not record the absolute k-mer database directory"
+	pass "set_targets records absolute database paths from another working directory"
+}
+
+test_update_taxonomy_requires_db_directory() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-update-taxonomy-state-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	err="$tmp/update-taxonomy.err"
+
+	mkdir -p "$fake_home"
+
+	if CLARK_HOME="$fake_home" "$REPO_DIR/scripts/updateTaxonomy.sh" >/dev/null 2>"$err"; then
+		fail "updateTaxonomy accepted a missing .DBDirectory state file"
+	fi
+
+	grep -Fq "scripts/set_targets.sh" "$err" || fail "updateTaxonomy did not explain how to configure the database directory"
+	pass "updateTaxonomy reports missing database configuration"
+}
+
+test_documentation_script_paths() {
+	if grep -E "\./(buildSpacedDB|classify_metagenome|clean|download_RefSeqDB|download_taxondata|estimate_abundance|evaluate_density_confidence|evaluate_density_gamma|extractSequences|getTargetsKmers_distribution|install|makeSummaryTables|make_metadata|resetCustomDB|set_targets|updateTaxonomy)\.sh|\./scripts/" \
+		"$REPO_DIR/README.md" "$REPO_DIR/README_FULL.md" "$REPO_DIR/docs/QUICKSTART.md" "$REPO_DIR/scripts/README.md" >/dev/null; then
+		fail "documentation still contains root-relative script examples"
+	fi
+	pass "README documents scripts/ commands without root-relative script paths"
 }
 
 test_get_targets_def_smoke() {
@@ -488,10 +591,10 @@ test_clark_l_label_bug_regression() {
 }
 
 test_ncbi_urls() {
-	if grep -R "ftp://ftp.ncbi.nih.gov\|ftp://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/download_RefSeqDB.sh" "$REPO_DIR/download_taxondata.sh" >/dev/null; then
+	if grep -R "ftp://ftp.ncbi.nih.gov\|ftp://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/scripts/download_RefSeqDB.sh" "$REPO_DIR/scripts/download_taxondata.sh" >/dev/null; then
 		fail "legacy or misspelled NCBI FTP URL remains"
 	fi
-	grep -Fq "https://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/download_taxondata.sh" || fail "taxonomy downloader does not use HTTPS NCBI URL"
+	grep -Fq "https://ftp.ncbi.nlm.nih.gov" "$REPO_DIR/scripts/download_taxondata.sh" || fail "taxonomy downloader does not use HTTPS NCBI URL"
 	pass "NCBI download URLs use HTTPS host"
 }
 
@@ -503,12 +606,17 @@ test_portable_script_paths() {
 }
 
 test_shell_syntax
+test_no_root_shell_scripts
 test_required_executables
 test_version_binaries
 test_classify_wrapper_quotes_paths
 test_classify_wrapper_gzip
 test_classify_wrapper_paired_light_variant
 test_classify_wrapper_rejects_conflicting_variants
+test_scripts_directory_entrypoint
+test_set_targets_records_absolute_db_paths
+test_update_taxonomy_requires_db_directory
+test_documentation_script_paths
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke

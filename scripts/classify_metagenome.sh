@@ -4,8 +4,8 @@ set -euo pipefail
 
 usage() {
 	cat <<'USAGE'
-Usage: ./classify_metagenome.sh -O <fileObjects> -R <fileResults> [options]
-       ./classify_metagenome.sh -P <file1> <file2> -R <fileResults> [options]
+Usage: scripts/classify_metagenome.sh -O <fileObjects> -R <fileResults> [options]
+       scripts/classify_metagenome.sh -P <file1> <file2> -R <fileResults> [options]
 
 Common options:
   -k <kmerSize>        k-mer length for CLARK
@@ -23,7 +23,7 @@ Common options:
   --spaced             run CLARK-S
   --gzipped            decompress input reads before classification
 
-Run ./set_targets.sh <DB_DIR> <database choice...> before classification.
+Run scripts/set_targets.sh <DB_DIR> <database choice...> before classification.
 USAGE
 }
 
@@ -65,11 +65,12 @@ if [ "$#" -lt 2 ]; then
 	exit 1
 fi
 
-LDIR="${CLARK_HOME:-$(script_dir)}"
+SCRIPT_DIR="$(script_dir)"
+LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
 SETTINGS_FILE="${CLARK_SETTINGS_FILE:-$LDIR/.settings}"
 EXE_DIR="${CLARK_EXE_DIR:-$LDIR/exe}"
 
-[ -s "$SETTINGS_FILE" ] || die "targets are not configured. Run ./set_targets.sh first."
+[ -s "$SETTINGS_FILE" ] || die "targets are not configured. Run scripts/set_targets.sh first."
 
 PARAMS=()
 while IFS= read -r line || [ -n "$line" ]; do
@@ -175,6 +176,6 @@ case "$VARIANT" in
 esac
 
 CLARK_EXE="$EXE_DIR/$CLARK_BINARY"
-[ -x "$CLARK_EXE" ] || die "missing executable '$CLARK_EXE'. Run ./install.sh first."
+[ -x "$CLARK_EXE" ] || die "missing executable '$CLARK_EXE'. Run scripts/install.sh first."
 
 "$CLARK_EXE" "${PARAMS[@]}"
