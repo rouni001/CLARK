@@ -59,6 +59,10 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
+### Version 1.4.2 (June 21, 2026)
+- Refactored RefSeq downloader with dry-run, manifest, and provenance outputs.
+- Removed `scripts/install.sh`; build CLARK with `make all`.
+
 ### Version 1.4.1 (June 20, 2026)
 - Fixed C++ warnings/errors messages, bugs related to string/filenames, openMP detection, 
 - Reorganized scripts, added Makefile and updated documentations. 

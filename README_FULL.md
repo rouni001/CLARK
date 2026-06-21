@@ -1279,6 +1279,8 @@ In the default or express mode, the results format is the following for each lin
 
 ## VERSIONS
 
+Version 1.4.2.0-a	June 21, 2026.
+
 Version 1.4.1.0-a	June 20, 2026.
 
 version 1.3.0.0		May 16, 2024

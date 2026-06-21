@@ -72,7 +72,7 @@ test_version_binaries() {
 	for binary in CLARK CLARK-l CLARK-S; do
 		version="$("$REPO_DIR/exe/$binary" --version)"
 		case "$version" in
-			*"Version: 1.4.1.0-a"*) ;;
+			*"Version: 1.4.2.0-a"*) ;;
 			*) fail "unexpected version output from $binary: $version" ;;
 		esac
 	done

@@ -1,3 +1,6 @@
+06/21/2026  Version 1.4.2.0-a:
+		RefSeq downloader refactored with dry-run, manifest and provenance outputs.
+		Removed install wrapper; users now build CLARK with "make all".
 06/20/2026  Version 1.4.1.0-a: 
 		Scripts and Repo reorganized. Bugfixes, code improvement included. Updating version.
 05/14/2024	Repo reorganized. Updating version and license terms.
