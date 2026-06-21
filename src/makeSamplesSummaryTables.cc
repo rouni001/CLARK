@@ -345,6 +345,37 @@ void DisplaySamples2(const int& topK, const double& abd, const vector<Sample>& S
 	/* Display */
 	ofstream fout("TableSummary_HitCount.csv");
 	string prefix =_isExtended?",,,":"";
+	if (HitCounts.empty())
+	{
+		fout << prefix << "Filenames,"  ;
+		for(size_t t=0; t < Samples.size(); t++)
+		{
+			fout << Samples[t].Name << "," ;
+		}
+		fout << endl;
+		fout << prefix <<"#TotalReads," ;
+		for(size_t t=0; t < Samples.size(); t++)
+		{
+			fout << Samples[t].NReads << "," ;
+		}
+		fout << endl;
+		fout << prefix << "#TotalReadsMapped," ;
+		for(size_t t=0; t < Samples.size(); t++)
+		{
+			fout << Samples[t].NRAssigned << "," ;
+		}
+		fout << endl;
+		if (_isExtended)
+		{	fout << "Domain,TaxonomyID,Name," ;	}
+		fout << "AlphaDiversity,";
+		for(size_t t=0; t < Samples.size(); t++)
+		{
+			fout << Samples[t].ADiversity << "," ;
+		}
+		fout << endl;
+		fout.close();
+		return;
+	}
 	fout << prefix << "Filenames,"  ;
 	for(size_t t=0; t < Samples.size(); t++)
 	{	
@@ -508,4 +539,3 @@ int main(const int argc, const char** argv)
 		return 0;
 	}
 }
-

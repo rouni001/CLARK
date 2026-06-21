@@ -292,6 +292,12 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 
+	if (i_deb < 0 || i_end < 0)
+	{
+		cerr << "Please provide one (or several) CLARK output file(s) (CSV format)." << endl;
+		exit(1);
+	}
+
 	FILE * fd = fopen(argv[i_deb], "r");
 	if (fd == NULL)
 	{

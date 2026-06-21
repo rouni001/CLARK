@@ -24,16 +24,18 @@
 #  @author: Rachid Ounit, Ph.D.
 #  @project: CLARK, Metagenomic and Genomic Sequences Classification project.
 #  @note: C++/Shell IMPLEMENTATION supported on latest Linux and Mac OS.
-#  getTargetsKmers_distribution.sh: To estimate abundance of target identified (reported
-#			  by taxa name and lineage) with count and proportion 
-#			  (against all reads or classified reads). 
-#			  Filtering options are offered.
+#  getTargetsKmers_distribution.sh: To print the target-specific k-mer distribution
+#			  for the current working database. The minimum k-mer
+#			  frequency defaults to 0 when omitted.
 # 
 
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 2 ]; then
-echo "Usage: $0 <k-mer length: integer between 2 and 32> <min k-mers frequency: default is 0>"
+if [ $# -lt 1 ]; then
+echo "Usage: $0 <k-mer length: integer between 2 and 32> [min k-mers frequency: default is 0]"
 exit
+fi
+if [ $# -eq 1 ]; then
+set -- "$1" 0
 fi
 "$LDIR/exe/getTargetSpecificKmersStat" "$LDIR/.settings" "$@"

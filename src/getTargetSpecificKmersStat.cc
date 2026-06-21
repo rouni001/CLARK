@@ -79,11 +79,13 @@ int main(int argc, char** argv)
 	string predbfile = ele[1];
 
 	fclose(fd);
-	size_t m_km = atoi(argv[2]);
+	int parsedKmerLength = atoi(argv[2]);
+	int parsedMinCount = atoi(argv[3]);
 	fd = fopen(ftarget.c_str(), "r");
-	size_t minCt = atoi(argv[3]);
+	size_t m_km = (size_t) parsedKmerLength;
+	size_t minCt = (size_t) parsedMinCount;
 	vector<size_t> countKmers;
-	if (m_km < 32 && m_km > 2 && minCt >= 0 && fd != NULL)
+	if (parsedKmerLength >= 2 && parsedKmerLength <= 32 && parsedMinCount >= 0 && fd != NULL)
 	{
 		while (getLineFromFile(fd, line))
 		{

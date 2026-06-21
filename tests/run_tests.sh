@@ -565,8 +565,11 @@ EOF
 	"$REPO_DIR/exe/getConfidenceDensity" "$result" > "$conf_out" 2> "$tmp/conf.err"
 
 	grep -Fq "assignments with Gamma score found" "$tmp/gamma.err" || fail "getGammaDensity did not process gamma scores"
+	grep -Fq "[0.50,0.52[" "$gamma_out" || fail "getGammaDensity did not report expected 0.50 gamma bucket"
 	grep -Fq "[>=1]" "$gamma_out" || fail "getGammaDensity did not report the >=1 gamma bucket"
 	grep -Fq "assignments with confidence score found" "$tmp/conf.err" || fail "getConfidenceDensity did not process confidence scores"
+	grep -Fq "[0.80,0.82[" "$conf_out" || fail "getConfidenceDensity did not report expected 0.80 confidence bucket"
+	grep -Fq "[1]" "$conf_out" || fail "getConfidenceDensity did not report the exact confidence score 1 bucket"
 	grep -Fq "[4.00,4.02[" "$conf_out" && fail "getConfidenceDensity emitted an impossible interval"
 	grep -Fq "Interval" "$conf_out" || fail "getConfidenceDensity did not emit a density table"
 	pass "density helpers summarize synthetic CLARK scores"
@@ -595,13 +598,45 @@ read1,4,111
 read2,4,222
 EOF
 
-	"$REPO_DIR/exe/extractSeqs" 111 "$reads" "$results" "$out_prefix" 0 0 > "$tmp/stdout" 2> "$tmp/stderr"
+	"$REPO_DIR/exe/extractSeqs" 111 "$reads" "$results" "$out_prefix" > "$tmp/stdout" 2> "$tmp/stderr"
 
 	grep -Fq "@read1" "$out_prefix.fq" || fail "extractSeqs did not extract the matching read"
 	if grep -Fq "@read2" "$out_prefix.fq"; then
 		fail "extractSeqs extracted a read assigned to a different taxid"
 	fi
 	pass "extractSeqs extracts matching FASTQ records"
+}
+
+test_extract_seqs_long_report_thresholds() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-extract-long-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	reads="$tmp/reads.fa"
+	results="$tmp/results.csv"
+	out_prefix="$tmp/extracted"
+	cat > "$reads" <<'EOF'
+>read1 description
+ACGT
+>read2
+TGCA
+>read3
+CCCC
+EOF
+	cat > "$results" <<'EOF'
+Object_ID,Length,Gamma,1st_assignment,score1,2nd_assignment,score2,confidence
+read1,4,0.50,111,9,222,3,0.80
+read2,4,0.01,111,9,222,3,0.90
+read3,4,0.50,222,9,111,3,0.90
+EOF
+
+	"$REPO_DIR/exe/extractSeqs" 111 "$reads" "$results" "$out_prefix" 0.03 0.75 > "$tmp/stdout" 2> "$tmp/stderr"
+
+	grep -Fq ">read1 description" "$out_prefix.fa" || fail "extractSeqs did not keep FASTA header for passing long-report assignment"
+	grep -Fq "ACGT" "$out_prefix.fa" || fail "extractSeqs did not keep FASTA sequence for passing long-report assignment"
+	if grep -Fq ">read2" "$out_prefix.fa" || grep -Fq ">read3" "$out_prefix.fa"; then
+		fail "extractSeqs kept filtered or wrong-taxid FASTA records"
+	fi
+	pass "extractSeqs applies gamma/confidence thresholds for long reports"
 }
 
 test_get_abundance_smoke() {
@@ -626,6 +661,35 @@ EOF
 	grep -Fq "111,111,2," "$out" || fail "getAbundance did not count assigned reads"
 	grep -Fq "UNKNOWN,UNKNOWN,1," "$out" || fail "getAbundance did not count unassigned reads"
 	pass "getAbundance summarizes a tiny assignment file"
+}
+
+test_get_abundance_filters_extended_scores() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-abundance-filter-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	results="$tmp/results.csv"
+	out="$tmp/abundance.csv"
+	cat > "$results" <<'EOF'
+Object_ID,Length,Gamma,1st_assignment,score1,2nd_assignment,score2,confidence
+read1,100,0.50,111,9,222,3,0.80
+read2,100,0.01,222,9,111,3,0.90
+read3,100,0.50,333,9,111,3,0.60
+read4,100,0.50,NA,0,NA,0,1.00
+EOF
+
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/getAbundance" -F "$results" -c 0.75 -g 0.03 > "$out"
+	)
+
+	grep -Fq "111,111,1,25,100" "$out" || fail "getAbundance did not keep the high-confidence assignment"
+	grep -Fq "UNKNOWN,UNKNOWN,3,75,-" "$out" || fail "getAbundance did not move filtered assignments to UNKNOWN"
+	if "$REPO_DIR/exe/getAbundance" -c 0.80 > "$tmp/no_file.out" 2> "$tmp/no_file.err"; then
+		fail "getAbundance accepted missing -F results"
+	fi
+	grep -Fq "Please provide one (or several) CLARK output file" "$tmp/no_file.err" ||
+		fail "getAbundance did not explain missing -F results"
+	pass "getAbundance filters extended scores and validates required input"
 }
 
 test_make_summary_tables_smoke() {
@@ -656,27 +720,57 @@ EOF
 	pass "makeSummaryTables writes summary tables for tiny reports"
 }
 
+test_make_summary_tables_all_unknown() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-summary-empty-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	report="$tmp/all_unknown.csv"
+	cat > "$report" <<'EOF'
+Name,TaxID,Count,Proportion_All(%),Proportion_Classified(%)
+UNKNOWN,UNKNOWN,4,100,-
+EOF
+
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/makeSummaryTables" 3 0 "$report" > stdout 2> stderr
+	)
+
+	grep -Fq "all_unknown,4,0," "$tmp/TableSummary_per_Report.csv" || fail "makeSummaryTables did not summarize an all-UNKNOWN report"
+	grep -Fq "#TotalReads,4," "$tmp/TableSummary_HitCount.csv" || fail "makeSummaryTables did not write total reads for all-UNKNOWN report"
+	grep -Fq "#TotalReadsMapped,0," "$tmp/TableSummary_HitCount.csv" || fail "makeSummaryTables did not write mapped reads for all-UNKNOWN report"
+	pass "makeSummaryTables handles reports with no classified taxa"
+}
+
 test_target_specific_kmers_stat_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-kmer-stat-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
 
+	fake_home="$tmp/home"
 	settings="$tmp/settings"
 	targets="$tmp/targets.txt"
 	dbdir="$tmp/db"
-	label_file="$dbdir/db_central_k3_t2_s1610612741_m0.tsk.lb"
-	mkdir -p "$dbdir"
+	label_file="$dbdir/db_central_k2_t2_s1610612741_m0.tsk.lb"
+	mkdir -p "$dbdir" "$fake_home/exe"
+	ln -s "$REPO_DIR/exe/getTargetSpecificKmersStat" "$fake_home/exe/getTargetSpecificKmersStat"
 	printf '%s\t%s\n%s\t%s\n' "$tmp/refA.fa" "111" "$tmp/refB.fa" "222" > "$targets"
 	printf -- '-T %s\n-D %s\n' "$targets" "$dbdir" > "$settings"
+	cp "$settings" "$fake_home/.settings"
 	printf '\000\000\001\000\001\000' > "$label_file"
 
 	(
 		cd "$tmp"
-		"$REPO_DIR/exe/getTargetSpecificKmersStat" "$settings" 3 0 > stdout 2> stderr
+		"$REPO_DIR/exe/getTargetSpecificKmersStat" "$settings" 2 0 > stdout 2> stderr
 	)
 
 	grep -Fq "111,1," "$tmp/targets.distribution.csv" || fail "getTargetSpecificKmersStat did not count target 111"
 	grep -Fq "222,2," "$tmp/targets.distribution.csv" || fail "getTargetSpecificKmersStat did not count target 222"
-	pass "getTargetSpecificKmersStat counts labels in a tiny database"
+	rm "$tmp/targets.distribution.csv"
+	(
+		cd "$tmp"
+		CLARK_HOME="$fake_home" "$REPO_DIR/scripts/getTargetsKmers_distribution.sh" 2 > stdout.script 2> stderr.script
+	)
+	grep -Fq "111,1," "$tmp/targets.distribution.csv" || fail "getTargetsKmers_distribution.sh did not default min frequency to 0"
+	pass "getTargetSpecificKmersStat counts labels in a tiny boundary-k database"
 }
 
 test_clark_l_label_bug_regression() {
@@ -731,8 +825,11 @@ test_exe_seq_smoke
 test_dscript_maker_smoke
 test_density_helpers_smoke
 test_extract_seqs_smoke
+test_extract_seqs_long_report_thresholds
 test_get_abundance_smoke
+test_get_abundance_filters_extended_scores
 test_make_summary_tables_smoke
+test_make_summary_tables_all_unknown
 test_target_specific_kmers_stat_smoke
 test_clark_l_label_bug_regression
 test_ncbi_urls

@@ -18,13 +18,14 @@
 #
 #   Copyright @ The Regents of the University of California. All rights reserved.
 #
-#   extractSequences: To extract sequences from the input data that mapped 
-#		      to a specified taxon.
+#   extractSequences: To extract sequences from the input data that mapped
+#		      to a specified taxon. For full/spectrum reports, pass
+#		      minimum gamma and confidence thresholds after the output prefix.
 #
 
 LDIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 
-if [ $# -lt 3 ]; then
+if [ $# -lt 4 ]; then
 "$LDIR/exe/extractSeqs"
 exit
 fi
