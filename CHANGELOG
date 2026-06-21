@@ -1,3 +1,10 @@
+06/21/2026  Version 1.4.4.0-a:
+		Improved RefSeq database setup for large downloads, especially bacteria.
+		RefSeq downloads now use parallel resumable transfers by default and support filters for smaller exploratory databases.
+		Hardened download correctness with NCBI URL validation, retries, gzip validation, partial-file cleanup, and aggregate progress reporting.
+		Used RefSeq assembly-summary provenance to avoid large global accession-map lookups when taxids are already available.
+		Added regression tests for malformed URLs, transient parallel failures, progress reporting, and resumable downloads.
+		Planned follow-up: replace the shell download engine with a Python 3 standard-library downloader with manifest state, checksum validation, and optional rsync acceleration.
 06/21/2026  Version 1.4.3.0-a:
 		Simplified CLARK classifier dispatch and tightened --kso mode validation.
 		Added unit and regression tests for file helpers, HashTop, and user-facing analysis tools.

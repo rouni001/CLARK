@@ -459,7 +459,7 @@ download_url_list() {
 		if [ "$job_count" -ge "$THREADS" ]; then
 			wait || die "failed to download one or more RefSeq genomes"
 			completed=$((completed + job_count))
-			if [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
+			if [ -t 1 ] || [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
 				report_download_progress "$completed" "$total"
 				while [ "$next_report" -le "$completed" ]; do
 					next_report=$((next_report + progress_step))

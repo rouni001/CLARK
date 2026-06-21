@@ -59,6 +59,13 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
+### Version 1.4.4 (June 21, 2026)
+- Improved large RefSeq database setup, especially for bacteria, with parallel resumable downloads by default.
+- Added RefSeq category and assembly-level filters for smaller exploratory databases.
+- Hardened download reliability with NCBI URL validation, retries, gzip validation, partial-file cleanup, and aggregate progress reporting.
+- Used RefSeq assembly-summary provenance to avoid large accession-map lookups when taxids are already available.
+- Added regression tests for malformed URLs, transient parallel failures, progress reporting, and resumable downloads.
+
 ### Version 1.4.3 (June 21, 2026)
 - Simplified CLARK classifier dispatch and made `--kso` validation order-independent.
 - Added focused unit/regression tests for file helpers, `HashTop`, and user-facing analysis tools.
