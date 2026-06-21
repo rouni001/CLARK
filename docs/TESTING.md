@@ -19,7 +19,7 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 24 regression tests. It verifies:
+The suite currently contains 26 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
@@ -32,6 +32,9 @@ The suite currently contains 24 regression tests. It verifies:
 - conflicting `--light` and `--spaced` options are rejected
 - direct `scripts/` entrypoints resolve the repository root correctly
 - `scripts/set_targets.sh` records absolute database paths when run from another working directory
+- `scripts/updateTaxonomy.sh` reports missing database configuration clearly
+- `scripts/download_RefSeqDB.sh --dry-run` writes RefSeq manifest and provenance files
+- `scripts/download_RefSeqDB.sh` can process a mocked NCBI assembly summary without live network access
 - README command examples use `scripts/` without stale root-relative script paths
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
 - `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
@@ -77,6 +80,6 @@ than for the core classifier algorithm.
 - golden FASTA/FASTQ fixtures with expected assignments
 - tests for abundance estimation with taxonomy names, Krona output, and MPA
   output
-- downloader tests using mocked NCBI manifests instead of live network calls
+- end-to-end downloader tests for additional database types using mocked NCBI manifests
 - converter tests for tiny contiguous-to-spaced k-mer databases
 - negative-path tests for long filenames and malformed input

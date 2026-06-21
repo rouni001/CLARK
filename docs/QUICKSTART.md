@@ -80,6 +80,8 @@ Record these details with each analysis:
 - Date when taxonomy/reference data were downloaded
 - Database choices and taxonomy rank passed to `scripts/set_targets.sh`
 - CLARK command line used for classification
+- RefSeq download manifest/provenance files written as
+  `.<database>.download_manifest.tsv` and `.<database>.provenance.tsv`
 
 ## 5. Script Layout
 
@@ -99,3 +101,5 @@ directory, use an absolute script path such as
 - Paths containing spaces are supported by the modernized scripts. Avoid moving
   the database directory after running `scripts/set_targets.sh`; rerun
   `scripts/set_targets.sh` if the database path changes.
+- To preview a large RefSeq download before starting it, run
+  `scripts/download_RefSeqDB.sh --dry-run <DIR_DB/> <database>`.

@@ -17,3 +17,14 @@ the absolute script path. For example:
 scripts/classify_metagenome.sh ...
 /path/to/CLARK/scripts/classify_metagenome.sh ...
 ```
+
+Before downloading large RefSeq datasets, you can inspect the planned work:
+
+```sh
+scripts/download_RefSeqDB.sh --dry-run /path/to/clark-db bacteria
+```
+
+The downloader writes `.<database>.download_manifest.tsv` and
+`.<database>.provenance.tsv` in the database directory. These files record the
+planned or completed URLs, source accessions, and RefSeq source dates when they
+are available from NCBI assembly summaries.
