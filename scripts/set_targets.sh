@@ -11,6 +11,13 @@ Database choices:
 
 Taxonomy rank:
   --species (default), --genus, --family, --order, --class, --phylum
+
+Download options for RefSeq databases:
+  --download-threads <N>              Download up to N sequence files at a time (default: 8).
+  --resume-downloads                  Keep existing sequence files and resume partial downloads (default: on).
+  --refseq-category <all|representative|reference>
+                                      Select all, representative, or reference RefSeq assemblies.
+  --assembly-level <level|all>        Select a RefSeq assembly_level (default: Complete Genome).
 USAGE
 }
 
@@ -51,22 +58,62 @@ DBDR_INPUT="$1"
 shift
 RANK=0
 DATABASES=()
+DOWNLOAD_THREADS="${CLARK_REFSEQ_THREADS:-8}"
+RESUME_DOWNLOADS="${CLARK_REFSEQ_RESUME:-1}"
+REFSEQ_CATEGORY="${CLARK_REFSEQ_CATEGORY:-all}"
+ASSEMBLY_LEVEL="${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}"
 
-for arg in "$@"; do
-	case "$arg" in
+while [ "$#" -gt 0 ]; do
+	case "$1" in
 		--species|--genus|--family|--order|--class|--phylum)
-			RANK="$(rank_value "$arg")"
+			RANK="$(rank_value "$1")"
+			shift
+			;;
+		--download-threads)
+			[ "$#" -ge 2 ] || die "--download-threads requires a positive integer"
+			DOWNLOAD_THREADS="$2"
+			shift 2
+			;;
+		--resume-downloads)
+			RESUME_DOWNLOADS=1
+			shift
+			;;
+		--refseq-category)
+			[ "$#" -ge 2 ] || die "--refseq-category requires all, representative, or reference"
+			REFSEQ_CATEGORY="$2"
+			shift 2
+			;;
+		--assembly-level)
+			[ "$#" -ge 2 ] || die "--assembly-level requires a value"
+			ASSEMBLY_LEVEL="$2"
+			shift 2
 			;;
 		--*)
-			die "unrecognized taxonomy rank '$arg'"
+			die "unrecognized option '$1'"
 			;;
 		*)
-			DATABASES+=("$arg")
+			DATABASES+=("$1")
+			shift
 			;;
 	esac
 done
 
 [ "${#DATABASES[@]}" -gt 0 ] || die "choose at least one database"
+
+case "$DOWNLOAD_THREADS" in
+	''|*[!0-9]*) die "--download-threads must be a positive integer" ;;
+esac
+[ "$DOWNLOAD_THREADS" -gt 0 ] || die "--download-threads must be a positive integer"
+
+case "$REFSEQ_CATEGORY" in
+	all|representative|reference) ;;
+	*) die "--refseq-category must be all, representative, or reference" ;;
+esac
+
+export CLARK_REFSEQ_THREADS="$DOWNLOAD_THREADS"
+export CLARK_REFSEQ_RESUME="$RESUME_DOWNLOADS"
+export CLARK_REFSEQ_CATEGORY="$REFSEQ_CATEGORY"
+export CLARK_REFSEQ_ASSEMBLY_LEVEL="$ASSEMBLY_LEVEL"
 
 SCRIPT_DIR="$(script_dir)"
 LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"

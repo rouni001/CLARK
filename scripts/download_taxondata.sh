@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: $0 <Directory: directory to store taxonomy data>"
+	echo "Usage: $0 [--skip-accession-maps] <Directory: directory to store taxonomy data>"
 }
 
 die() {
@@ -24,6 +24,12 @@ download_file() {
 	fi
 }
 
+SKIP_ACCESSION_MAPS=0
+if [ "${1:-}" = "--skip-accession-maps" ]; then
+	SKIP_ACCESSION_MAPS=1
+	shift
+fi
+
 if [ "$#" -ne 1 ]; then
 	usage
 	exit 1
@@ -40,21 +46,28 @@ mkdir -p "$TARGET_DIR"
 cd "$TARGET_DIR"
 
 echo "Downloading NCBI taxonomy data..."
-download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_gb.accession2taxid.gz" "nucl_gb.accession2taxid.gz"
-download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_wgs.accession2taxid.gz" "nucl_wgs.accession2taxid.gz"
+if [ "$SKIP_ACCESSION_MAPS" != "1" ]; then
+	download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_gb.accession2taxid.gz" "nucl_gb.accession2taxid.gz"
+	download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_wgs.accession2taxid.gz" "nucl_wgs.accession2taxid.gz"
+fi
 download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz" "taxdump.tar.gz"
 
-if [ -s "nucl_gb.accession2taxid.gz" ] && [ -s "nucl_wgs.accession2taxid.gz" ] && [ -s "taxdump.tar.gz" ]; then
+if { [ "$SKIP_ACCESSION_MAPS" = "1" ] || { [ -s "nucl_gb.accession2taxid.gz" ] && [ -s "nucl_wgs.accession2taxid.gz" ]; }; } && [ -s "taxdump.tar.gz" ]; then
 	echo "Uncompressing taxonomy data..."
-	gunzip -f "nucl_wgs.accession2taxid.gz"
-	gunzip -f "nucl_gb.accession2taxid.gz"
+	if [ "$SKIP_ACCESSION_MAPS" != "1" ]; then
+		gunzip -f "nucl_wgs.accession2taxid.gz"
+		gunzip -f "nucl_gb.accession2taxid.gz"
+	fi
 	tar -zxf "taxdump.tar.gz"
 else
 	die "failed to download one or more taxonomy files"
 fi
 
-if [ -s "nucl_gb.accession2taxid" ] && [ -s "nucl_wgs.accession2taxid" ] && [ -s "nodes.dmp" ] && [ -s "merged.dmp" ] && [ -s "names.dmp" ]; then
-	cat "nucl_gb.accession2taxid" "nucl_wgs.accession2taxid" > "nucl_accss"
+if [ -s "nodes.dmp" ] && [ -s "merged.dmp" ] && [ -s "names.dmp" ]; then
+	if [ "$SKIP_ACCESSION_MAPS" != "1" ]; then
+		[ -s "nucl_gb.accession2taxid" ] && [ -s "nucl_wgs.accession2taxid" ] || die "failed to unpack accession-to-taxid maps"
+		cat "nucl_gb.accession2taxid" "nucl_wgs.accession2taxid" > "nucl_accss"
+	fi
 	touch "../.taxondata"
 	echo "Taxonomy data ready in $TARGET_DIR"
 else

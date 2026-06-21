@@ -59,6 +59,13 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 ## Releases
 
+### Version 1.4.4 (June 21, 2026)
+- Improved large RefSeq database setup, especially for bacteria, with parallel resumable downloads by default.
+- Added RefSeq category and assembly-level filters for smaller exploratory databases.
+- Hardened download reliability with NCBI URL validation, retries, gzip validation, partial-file cleanup, and aggregate progress reporting.
+- Used RefSeq assembly-summary provenance to avoid large accession-map lookups when taxids are already available.
+- Added regression tests for malformed URLs, transient parallel failures, progress reporting, and resumable downloads.
+
 ### Version 1.4.3 (June 21, 2026)
 - Simplified CLARK classifier dispatch and made `--kso` validation order-independent.
 - Added focused unit/regression tests for file helpers, `HashTop`, and user-facing analysis tools.
@@ -184,6 +191,19 @@ Scripts provided for metagenomic classification:
    - Only bacteria: `scripts/set_targets.sh <DIR_DB/> bacteria`
    - Bacteria, viruses, and human: `scripts/set_targets.sh <DIR_DB/> bacteria viruses human`
    - Bacteria and custom: `scripts/set_targets.sh <DIR_DB/> bacteria custom`
+
+RefSeq downloads use 8 parallel workers and resume mode by default. To build a
+smaller bacteria database for exploratory work, restrict RefSeq assemblies to
+representative or reference genomes:
+
+```sh
+scripts/set_targets.sh <DIR_DB/> bacteria --refseq-category representative
+```
+
+By default CLARK keeps the historical behavior: all latest complete RefSeq
+assemblies for the selected database are downloaded. For standard RefSeq
+libraries with assembly-summary taxids, CLARK now uses that provenance directly
+and avoids the large global accession-map lookup when it is not needed.
 
 ### Running the Classification
 
