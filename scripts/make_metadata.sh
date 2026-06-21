@@ -74,7 +74,7 @@ if [ ! -s "$DBDR/.$DB" ]; then
 fi
 
 if [ ! -x "$LDIR/exe/getfilesToTaxNodes" ] || [ ! -x "$LDIR/exe/getAccssnTaxID" ]; then
-	die "required helper executables are missing. Run scripts/install.sh first."
+	die "required helper executables are missing. Run 'make all' from the CLARK repository root first."
 fi
 
 [ -s "$DBDR/.$DB" ] || die "failed to find $DB sequences"

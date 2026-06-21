@@ -108,7 +108,7 @@ CLARK is distributed under the GNU General Public License (GPL) v3. It is free s
 
 1. Download the latest version from the CLARK webpage: [http://clark.cs.ucr.edu](http://clark.cs.ucr.edu)
 2. Uncompress the tar.gz file: `tar -xvf CLARKV1.3.0.tar.gz`
-3. Navigate to the CLARK directory and run the installation script: `scripts/install.sh`
+3. Navigate to the CLARK directory and build the executables: `make all`
 
 ## Usage
 

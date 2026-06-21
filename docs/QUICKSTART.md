@@ -7,11 +7,11 @@ want to debug compiler flags, shell quoting, or hidden CLARK state files.
 
 ```sh
 cd /path/to/CLARK
-scripts/install.sh
+make all
 make test
 ```
 
-`scripts/install.sh` builds the CLARK helper tools plus the three classifiers:
+`make all` builds the CLARK helper tools plus the three classifiers:
 
 - `exe/CLARK`
 - `exe/CLARK-l`
@@ -19,7 +19,7 @@ make test
 
 If your compiler does not support OpenMP, the build still succeeds but prints
 that CLARK was built in single-threaded mode. On macOS with Apple clang, install
-a compiler with OpenMP support and rerun with `CXX=g++ scripts/install.sh` if you need
+a compiler with OpenMP support and rerun with `CXX=g++ make all` if you need
 parallel execution.
 
 ## 2. Prepare a Database
@@ -85,8 +85,8 @@ Record these details with each analysis:
 
 ## 5. Script Layout
 
-All repository shell scripts live under `scripts/`. Run commands such as
-`scripts/install.sh`, `scripts/set_targets.sh`, and
+All repository shell scripts live under `scripts/`. Build CLARK with `make all`,
+then run commands such as `scripts/set_targets.sh` and
 `scripts/classify_metagenome.sh` directly from the repository root. From another
 directory, use an absolute script path such as
 `/path/to/CLARK/scripts/classify_metagenome.sh`.
@@ -95,7 +95,7 @@ directory, use an absolute script path such as
 
 - If `scripts/classify_metagenome.sh` says targets are not configured, run
   `scripts/set_targets.sh` first.
-- If a script says an executable is missing, run `scripts/install.sh`.
+- If a script says an executable is missing, run `make all`.
 - If `-n` does not speed up classification, check the install output for
   `OpenMP: disabled`.
 - Paths containing spaces are supported by the modernized scripts. Avoid moving

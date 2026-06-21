@@ -237,11 +237,11 @@ approximation) of results you would get by running CLARK or CLARK-S.
 First, download the zipped package of the latest version, available from 
 the CLARK webpage ("Download tab"), http://clark.cs.ucr.edu.
 Second, uncompress the tar.gz file ("tar -xvf CLARKV1.3.0.tar.gz"), then go to 
-the sub-directory "CLARKSCV1.3.0" and execute the installation script ("scripts/install.sh").
+the sub-directory "CLARKSCV1.3.0" and build the executables with "make all".
 
-The installation is done! You can now run CLARK and any of the provided scripts.
+The build is done! You can now run CLARK and any of the provided scripts.
 
-The installer builds binaries (CLARK, CLARK-l and CLARK-S, in the folder "exe" in 
+The build creates binaries (CLARK, CLARK-l and CLARK-S, in the folder "exe" in
 CLARKSCV1.3.0). 
 
 ## SCRIPTS
@@ -875,7 +875,7 @@ each target identified), `scripts/estimate_abundance.sh`, from one or several re
 
 #### Step I: Setting targets
 
-After the installation (scripts/install.sh), the user must create a directory to store all
+After building CLARK with "make all", the user must create a directory to store all
 reference sequences (bacteria, viruses, plasmid, plastid, protozoa, fungi, human and custom). 
 For all our examples below, we name this directory path in a generic way <DIR_DB/> for clarity. 
 This directory can be anywhere in your disk(s).

@@ -37,7 +37,6 @@ REQUIRED_EXECUTABLES=(
 
 test_shell_syntax() {
 	for script in \
-		"$REPO_DIR/scripts/install.sh" \
 		"$REPO_DIR/scripts/classify_metagenome.sh" \
 		"$REPO_DIR/scripts/set_targets.sh" \
 		"$REPO_DIR/scripts/make_metadata.sh" \
