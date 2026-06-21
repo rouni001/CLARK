@@ -37,7 +37,6 @@ REQUIRED_EXECUTABLES=(
 
 test_shell_syntax() {
 	for script in \
-		"$REPO_DIR/scripts/install.sh" \
 		"$REPO_DIR/scripts/classify_metagenome.sh" \
 		"$REPO_DIR/scripts/set_targets.sh" \
 		"$REPO_DIR/scripts/make_metadata.sh" \
@@ -73,7 +72,7 @@ test_version_binaries() {
 	for binary in CLARK CLARK-l CLARK-S; do
 		version="$("$REPO_DIR/exe/$binary" --version)"
 		case "$version" in
-			*"Version: 1.4.1.0-a"*) ;;
+			*"Version: 1.4.2.0-a"*) ;;
 			*) fail "unexpected version output from $binary: $version" ;;
 		esac
 	done
@@ -328,6 +327,76 @@ test_update_taxonomy_requires_db_directory() {
 
 	grep -Fq "scripts/set_targets.sh" "$err" || fail "updateTaxonomy did not explain how to configure the database directory"
 	pass "updateTaxonomy reports missing database configuration"
+}
+
+test_refseq_downloader_dry_run_manifest() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-dry-run-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	out="$tmp/dry-run.out"
+
+	"$REPO_DIR/scripts/download_RefSeqDB.sh" --dry-run "$dbdir" plasmid > "$out"
+
+	grep -Fq "Dry run" "$out" || fail "RefSeq downloader dry-run did not report dry-run mode"
+	require_file "$dbdir/.plasmid.download_manifest.tsv"
+	require_file "$dbdir/.plasmid.provenance.tsv"
+	grep -Fq "plasmid.1.1.genomic.fna.gz" "$dbdir/.plasmid.download_manifest.tsv" || fail "RefSeq downloader dry-run did not plan plasmid downloads"
+	grep -Fq "plasmid.1.1" "$dbdir/.plasmid.provenance.tsv" || fail "RefSeq downloader dry-run did not record static accession provenance"
+	[ ! -d "$dbdir/Plasmid" ] || fail "RefSeq downloader dry-run created a sequence directory"
+	pass "RefSeq downloader dry-run writes manifest and provenance"
+}
+
+test_refseq_downloader_mocked_assembly_summary() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-mocked-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	log="$tmp/wget.log"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = "-O" ]; then
+	out="$2"
+	url="$3"
+	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	case "$url" in
+		*/assembly_summary.txt)
+			{
+				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+				printf 'GCF_999999999.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2024-01-02\tMockVirus1\tCLARK\tna\tna\thttps://example.org/refseq/GCF_999999999.1_MockVirus1\n'
+				printf 'GCF_000000000.1\tna\tna\tna\trepresentative genome\t10239\t10239\tOld virus\tna\tna\treplaced\tComplete Genome\tMajor\tFull\t2020-01-02\tOldVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000000.1_OldVirus\n'
+			} > "$out"
+			;;
+		*)
+			echo "unexpected wget -O URL: $url" >&2
+			exit 1
+			;;
+	esac
+else
+	url="$1"
+	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	file="${url##*/}"
+	printf '>mock-virus\nACGT\n' | gzip > "$file"
+fi
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" "$dbdir" viruses > "$tmp/downloader.out"
+
+	require_file "$dbdir/.viruses"
+	grep -Fq "GCF_999999999.1_MockVirus1_genomic.fna" "$dbdir/.viruses" || fail "RefSeq downloader did not list decompressed virus FASTA"
+	grep -Fq "GCF_999999999.1" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not record assembly accession provenance"
+	grep -Fq "2024-01-02" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not preserve assembly source date"
+	grep -Fq "downloaded" "$dbdir/.viruses.download_manifest.tsv" || fail "RefSeq downloader did not record completed downloads"
+	[ ! -e "$dbdir/Viruses/download.sh" ] || fail "RefSeq downloader generated a legacy download.sh script"
+	pass "RefSeq downloader uses mocked assembly summaries without generated scripts"
 }
 
 test_documentation_script_paths() {
@@ -616,6 +685,8 @@ test_classify_wrapper_rejects_conflicting_variants
 test_scripts_directory_entrypoint
 test_set_targets_records_absolute_db_paths
 test_update_taxonomy_requires_db_directory
+test_refseq_downloader_dry_run_manifest
+test_refseq_downloader_mocked_assembly_summary
 test_documentation_script_paths
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke

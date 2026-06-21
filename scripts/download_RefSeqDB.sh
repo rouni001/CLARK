@@ -17,331 +17,277 @@
 #   You should have received a copy of the GNU General Public License
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
-#    Copyright @ The Regents of the University of California. All rights reserved.
+#   Copyright @ The Regents of the University of California. All rights reserved.
 #
-#   download_RefseqDB.sh: To download complete reference genomes of NCBI/RefSeq 
-#   (i.e., Bacteria/Archaea, Viruses, Plasmid, Protozoa, Fungi and Human).
+#   download_RefseqDB.sh: To download complete reference genomes of NCBI/RefSeq
+#   (i.e., Bacteria/Archaea, Viruses, Plasmid, Plastid, Protozoa, Fungi and Human).
 
-if [ $# -ne 2 ]; then
-echo "Usage: $0 <Directory for the sequences> <Database: bacteria, viruses, plasmid, plastid, protozoa, fungi or human> "
-exit
+set -eu
+
+usage() {
+	echo "Usage: $0 [--dry-run] <Directory for the sequences> <Database: bacteria, viruses, plasmid, plastid, protozoa, fungi or human> "
+}
+
+die() {
+	echo "Error: $*" >&2
+	exit 1
+}
+
+if [ "${1:-}" = "--dry-run" ]; then
+	DRY_RUN=1
+	shift
+else
+	DRY_RUN=${CLARK_REFSEQ_DRY_RUN:-0}
+fi
+
+if [ "$#" -ne 2 ]; then
+	usage
+	exit 1
 fi
 
 DIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
 DBDR="$1"
 DB="$2"
+STATIC_URLS_FILE=${CLARK_REFSEQ_STATIC_URLS:-"$DIR/scripts/refseq_static_urls.tsv"}
+RUN_STARTED_UTC=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%dT%H:%M:%SZ')
 
-if [ "$DB" = "bacteria" ]; then
+case "$DB" in
+	bacteria|viruses|plasmid|plastid|protozoa|fungi|human) ;;
+	*) die "failed to recognize parameter: $DB. Please choose between: bacteria, viruses, plasmid, plastid, protozoa, fungi or human." ;;
+esac
 
-	if [ ! -s "$DBDR/.bacteria" ]; then
-		rm -Rf "$DBDR/Bacteria" "$DBDR"/.bacteria.*
-		mkdir -m 775 "$DBDR/Bacteria"
-		cd "$DBDR/Bacteria/" || exit
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
-		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
-		chmod 711 ./download.sh
-		echo "Downloading now Bacteria/Archaea complete genomes (quiet mode)... [This operation will take several hours or more to complete.]"
-		./download.sh 2> ".$DB.tmp"
-		rm -f ./assembly_summary.txt
-	
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/archaea/assembly_summary.txt > ".$DB.tmp"
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
-		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
-		./download.sh 2> ".$DB.tmp"
-		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
+mkdir -p "$DBDR"
+DBDR=$(CDPATH= cd "$DBDR" && pwd -P)
+MARKER="$DBDR/.$DB"
+MANIFEST="$DBDR/.$DB.download_manifest.tsv"
+PROVENANCE="$DBDR/.$DB.provenance.tsv"
 
-		echo "Downloading done! Uncompressing files... "
-		find "$(pwd)" -iname "*fna.gz" > ./bacteria.gz.list.txt
-		while IFS= read -r gzipped_bacteria_file || [ -n "$gzipped_bacteria_file" ]
-		do
-			[ -n "$gzipped_bacteria_file" ] || continue
-			gunzip "$gzipped_bacteria_file"
-		done < ./bacteria.gz.list.txt
-		find "$(pwd)" -name '*.fna' > ../.bacteria
-		cd ..
-		if  [ ! -s .bacteria ]; then
-			echo "Error: Failed to download bacteria sequences. "
-			exit
-		fi
-		echo "Bacteria/Archaea sequences downloaded!"
-	else
-		echo "Bacteria/Archaea sequences already in $DBDR."
+db_directory_name() {
+	case "$1" in
+		bacteria) echo "Bacteria" ;;
+		viruses) echo "Viruses" ;;
+		plasmid) echo "Plasmid" ;;
+		plastid) echo "Plastid" ;;
+		protozoa) echo "Protozoa" ;;
+		fungi) echo "Fungi" ;;
+		human) echo "Human" ;;
+	esac
+}
+
+display_name() {
+	case "$1" in
+		bacteria) echo "Bacteria/Archaea" ;;
+		viruses) echo "Viruses" ;;
+		plasmid) echo "Plasmid" ;;
+		plastid) echo "Plastid" ;;
+		protozoa) echo "Protozoa" ;;
+		fungi) echo "Fungi" ;;
+		human) echo "Human" ;;
+	esac
+}
+
+assembly_sources() {
+	case "$DB" in
+		bacteria)
+			printf '%s\n' bacteria archaea
+			;;
+		viruses)
+			printf '%s\n' viral
+			;;
+		protozoa|fungi)
+			printf '%s\n' "$DB"
+			;;
+	esac
+}
+
+sequence_pattern() {
+	case "$DB" in
+		plasmid|plastid) echo "*.fa" ;;
+		*) echo "*.fna" ;;
+	esac
+}
+
+needs_sequence_split() {
+	case "$DB" in
+		plasmid|plastid) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+init_reports() {
+	printf 'timestamp_utc\tdatabase\taction\tsource\turl\tlocal_path\tstatus\n' > "$MANIFEST"
+	printf 'database\tsource\taccession\tseq_rel_date\tassembly_level\tversion_status\turl\n' > "$PROVENANCE"
+}
+
+record_manifest() {
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+		"$RUN_STARTED_UTC" "$DB" "$1" "$2" "$3" "$4" "$5" >> "$MANIFEST"
+}
+
+record_provenance() {
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+		"$DB" "$1" "$2" "$3" "$4" "$5" "$6" >> "$PROVENANCE"
+}
+
+accession_from_url() {
+	file_name=${1##*/}
+	accession=${file_name%_genomic.fna.gz}
+	accession=${accession%.genomic.fna.gz}
+	accession=${accession%.fna.gz}
+	echo "$accession"
+}
+
+fetch_to_file() {
+	url="$1"
+	output="$2"
+	source="$3"
+
+	if [ "$DRY_RUN" = "1" ]; then
+		record_manifest "plan" "$source" "$url" "$output" "dry-run"
+		return 0
 	fi
-	exit
-fi
 
-if [ "$DB" = "viruses" ]; then
-	if [ ! -s "$DBDR/.viruses" ]; then
-		rm -Rf "$DBDR/Viruses" "$DBDR"/.viruses.*
-		mkdir -m 775 "$DBDR/Viruses"
-		cd "$DBDR/Viruses/" || exit
-		echo "Downloading now Viruses complete genomes:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/viral/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
-		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
-		chmod 711 ./download.sh
-		./download.sh 2> ".$DB.tmp"
-		echo "Downloading done. Uncompressing files... "
-		find "$(pwd)" -name '*.gz' > ./virus.gz.list.txt
-		while IFS= read -r gzipped_virus_file || [ -n "$gzipped_virus_file" ]
-		do
-			[ -n "$gzipped_virus_file" ] || continue
-			gunzip "$gzipped_virus_file"
-		done < ./virus.gz.list.txt
-		rm -f ./virus.gz.list.txt
-		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
-
-		find "$(pwd)" -name '*.fna'  > ../.viruses
-		cd ..
-		if  [ ! -s .viruses ]; then
-			echo "Error: Failed to download viruses sequences. "
-			exit
-		fi
-		echo "Viruses sequences downloaded!"
+	if command -v wget >/dev/null 2>&1; then
+		wget -O "$output" "$url"
+	elif command -v curl >/dev/null 2>&1; then
+		curl -fL -o "$output" "$url"
 	else
-		echo "Viruses sequences already in $DBDR."
+		die "neither wget nor curl is available"
 	fi
-	exit
-fi
 
-if [ "$DB" = "plasmid" ]; then
-        if [ ! -s "$DBDR/.plasmid" ]; then
-			rm -Rf "$DBDR/Plasmid" "$DBDR"/.plasmid.*
-			mkdir -m 775 "$DBDR/Plasmid"
-			cd "$DBDR/Plasmid/" || exit
-			echo "Downloading now Plasmid genomes:"
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.1.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.2.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.3.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.4.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.5.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plasmid/plasmid.6.1.genomic.fna.gz
-					
-			echo "Downloading done. Uncompressing files... "
-			gunzip plasmid*.genomic.fna.gz
-			echo " * Processing sequences..."
-			for file in `ls ./*fna`
-				do
-					"$DIR/exe/exeSeq" "$file" ./
-				done
-			rm -f ./plasmid*.genomic.fna.gz
-			find "$(pwd)" -name '*.fa'  > ../.plasmid
-			cd ..
-			if  [ ! -s .plasmid ]; then
-				echo "Error: Failed to download plasmid sequences. "
-				exit
-			fi
-			echo "Plasmid sequences downloaded!"
-        else
-			echo "Plasmid sequences already in $DBDR."
-        fi
-        exit
-fi
+	[ -s "$output" ] || die "failed to download $url"
+	record_manifest "download" "$source" "$url" "$(pwd)/$output" "downloaded"
+}
 
-if [ "$DB" = "plastid" ]; then
-        if [ ! -s "$DBDR/.plastid" ]; then
-			rm -Rf "$DBDR/Plastid" "$DBDR"/.plastid.*
-			mkdir -m 775 "$DBDR/Plastid"
-			cd "$DBDR/Plastid/" || exit
-			echo "Downloading now Plastid genomes:"
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plastid/plastid.1.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plastid/plastid.2.1.genomic.fna.gz
-			wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plastid/plastid.3.1.genomic.fna.gz
-			echo "Downloading done. Uncompressing files... "
-			gunzip plastid*.genomic.fna.gz
-			echo " * Processing sequences..."
-			for file in `ls ./*fna`
-			do
-					"$DIR/exe/exeSeq" "$file" ./
-			done
-			rm -f ./plastid*.genomic.fna.gz
-			find "$(pwd)" -name '*.fa'  > ../.plastid
-			cd ..
-			if  [ ! -s .plastid ]; then
-					echo "Error: Failed to download plastid sequences. "
-					exit
-			fi
-			echo "Plastid sequences downloaded!"
-        else
-			echo "Plastid sequences already in $DBDR."
-        fi
-        exit
-fi
+fetch_url() {
+	url="$1"
+	source="$2"
+	output=${url##*/}
 
-if [ "$DB" = "fungi" ]; then
-	if [ ! -s "$DBDR/.fungi" ]; then
-		rm -Rf "$DBDR/Fungi" "$DBDR"/.fungi.*
-		mkdir -m 775 "$DBDR/Fungi"
-		cd "$DBDR/Fungi/" || exit
-		echo "Downloading now RefSeq fungi complete genomes:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$DB/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
-		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
-		chmod 711 ./download.sh
-		./download.sh  2> ".$DB.tmp"
-		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
+	if [ "$DRY_RUN" = "1" ]; then
+		record_manifest "plan" "$source" "$url" "$output" "dry-run"
+		return 0
+	fi
 
-        echo "Downloading now a list of 47 fungi reference genomes..."
-#Blastomyces dermatitidis
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/003/525/GCA_000003525.2_BD_ER3_V1/GCA_000003525.2_BD_ER3_V1_genomic.fna.gz
-#Candida parapsilosis strain CDC317
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/182/765/GCA_000182765.2_ASM18276v2/GCA_000182765.2_ASM18276v2_genomic.fna.gz
-#Saccharomyces sp. 'boulardii'
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/413/975/GCA_001413975.1_ASM141397v1/GCA_001413975.1_ASM141397v1_genomic.fna.gz
-#Blastomyces percursus strain EI222
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/883/805/GCA_001883805.1_Blas_perc_EI222_V1/GCA_001883805.1_Blas_perc_EI222_V1_genomic.fna.gz
-#Aspergillus tubingensis CBS 134.48
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/890/745/GCA_001890745.1_Asptu1/GCA_001890745.1_Asptu1_genomic.fna.gz
-#Fusarium solani strain JS-169
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/215/905/GCA_002215905.1_ASM221590v1/GCA_002215905.1_ASM221590v1_genomic.fna.gz
-#Lomentospora prolificans strain JHH-5317
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/276/285/GCA_002276285.1_Lprolificans_pilon/GCA_002276285.1_Lprolificans_pilon_genomic.fna.gz
-#Candida glabrata CBS 138
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/545/GCF_000002545.3_ASM254v2/GCF_000002545.3_ASM254v2_genomic.fna.gz
-#Aspergillus fumigatus Af293
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/655/GCF_000002655.1_ASM265v1/GCF_000002655.1_ASM265v1_genomic.fna.gz
-#Aspergillus clavatus NRRL 1
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/715/GCF_000002715.2_ASM271v1/GCF_000002715.2_ASM271v1_genomic.fna.gz
-#Ajellomyces dermatitidis SLH14081
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/003/855/GCF_000003855.2_ASM385v2/GCF_000003855.2_ASM385v2_genomic.fna.gz
-#Aspergillus flavus NRRL3357
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/006/275/GCF_000006275.2_JCVI-afl1-v2.0/GCF_000006275.2_JCVI-afl1-v2.0_genomic.fna.gz
-#Candida tropicalis MYA-3404
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/006/335/GCF_000006335.2_ASM633v2/GCF_000006335.2_ASM633v2_genomic.fna.gz
-#Candida dubliniensis CD36
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/026/945/GCF_000026945.1_ASM2694v1/GCF_000026945.1_ASM2694v1_genomic.fna.gz
-#Cryptococcus neoformans var. grubii H99
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/245/GCF_000149245.1_CNA3/GCF_000149245.1_CNA3_genomic.fna.gz
-#Coccidioides immitis RS
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/335/GCF_000149335.2_ASM14933v2/GCF_000149335.2_ASM14933v2_genomic.fna.gz
-#Meyerozyma guilliermondii ATCC 6260
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/425/GCF_000149425.1_ASM14942v1/GCF_000149425.1_ASM14942v1_genomic.fna.gz
-#Fusarium verticillioides 7600
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/555/GCF_000149555.1_ASM14955v1/GCF_000149555.1_ASM14955v1_genomic.fna.gz
-#Histoplasma capsulatum NAm1
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/585/GCF_000149585.1_ASM14958v1/GCF_000149585.1_ASM14958v1_genomic.fna.gz
-#Fusarium oxysporum f. sp. lycopersici 4287
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/955/GCF_000149955.1_ASM14995v2/GCF_000149955.1_ASM14995v2_genomic.fna.gz
-#Paracoccidioides lutzii Pb01
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/150/705/GCF_000150705.2_Paracocci_br_Pb01_V2/GCF_000150705.2_Paracocci_br_Pb01_V2_genomic.fna.gz
-#Paracoccidioides brasiliensis Pb18
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/150/735/GCF_000150735.1_Paracocci_br_Pb18_V2/GCF_000150735.1_Paracocci_br_Pb18_V2_genomic.fna.gz
-#Coccidioides posadasii C735 delta SOWgp
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/151/335/GCF_000151335.1_JCVI-cpa1-1.0/GCF_000151335.1_JCVI-cpa1-1.0_genomic.fna.gz
-#Candida albicans SC5314
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/182/965/GCF_000182965.3_ASM18296v3/GCF_000182965.3_ASM18296v3_genomic.fna.gz
-#Pneumocystis murina B123
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/349/005/GCF_000349005.2_Pneumo_murina_B123_V4/GCF_000349005.2_Pneumo_murina_B123_V4_genomic.fna.gz
-#[Candida] auris strain 6684
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/189/475/GCF_001189475.1_ASM118947v1/GCF_001189475.1_ASM118947v1_genomic.fna.gz
-#Pneumocystis jirovecii RU7
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/477/535/GCF_001477535.1_Pneu_jiro_RU7_V2/GCF_001477535.1_Pneu_jiro_RU7_V2_genomic.fna.gz
-#Pneumocystis carinii B80
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/477/545/GCF_001477545.1_Pneu_cari_B80_V3/GCF_001477545.1_Pneu_cari_B80_V3_genomic.fna.gz
-#Pichia kudriavzevii strain 129
-        wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/983/325/GCF_001983325.1_ASM198332v1/GCF_001983325.1_ASM198332v1_genomic.fna.gz
-#Aspergillus fischeri
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/645/GCF_000149645.1_ASM14964v1/GCF_000149645.1_ASM14964v1_genomic.fna.gz
-#Fusarium proliferatum
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/900/067/095/GCA_900067095.1_F._proliferatum_ET1_version_1/GCA_900067095.1_F._proliferatum_ET1_version_1_genomic.fna.gz
-#Malassezia spp.
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/985/GCA_001264985.1_ASM126498v1/GCA_001264985.1_ASM126498v1_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/835/GCA_001600835.1_JCM_12085_assembly_v001/GCA_001600835.1_JCM_12085_assembly_v001_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/795/GCA_001600795.1_JCM_11963_assembly_v001/GCA_001600795.1_JCM_11963_assembly_v001_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/600/775/GCA_001600775.1_JCM_11348_assembly_v001/GCA_001600775.1_JCM_11348_assembly_v001_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/002/551/515/GCA_002551515.1_Malafurf/GCA_002551515.1_Malafurf_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/725/GCA_001264725.1_ASM126472v1/GCA_001264725.1_ASM126472v1_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/181/695/GCF_000181695.1_ASM18169v1/GCF_000181695.1_ASM18169v1_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/349/305/GCF_000349305.1_ASM34930v2/GCF_000349305.1_ASM34930v2_genomic.fna.gz
-
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/264/965/GCA_001264965.1_ASM126496v1/GCA_001264965.1_ASM126496v1_genomic.fna.gz
-#Cladosporium sphaerospermum
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/000/261/425/GCA_000261425.2_UM843Vel2.0/GCA_000261425.2_UM843Vel2.0_genomic.fna.gz
-#Candida orthopsilosis
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/315/875/GCF_000315875.1_ASM31587v1/GCF_000315875.1_ASM31587v1_genomic.fna.gz
-#Alternaria alternata
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/001/642/055/GCF_001642055.1_Altal1/GCF_001642055.1_Altal1_genomic.fna.gz
-#Cryptococcus neoformans
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/149/245/GCF_000149245.1_CNA3/GCF_000149245.1_CNA3_genomic.fna.gz
-#Trichosporon asahii
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/293/215/GCF_000293215.1_Trichosporon_asahii_1/GCF_000293215.1_Trichosporon_asahii_1_genomic.fna.gz
-#Enterocytozoon bieneusi
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/209/485/GCF_000209485.1_ASM20948v1/GCF_000209485.1_ASM20948v1_genomic.fna.gz
-#Naganishia albida
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/001/599/735/GCA_001599735.1_JCM_2334_assembly_v001/GCA_001599735.1_JCM_2334_assembly_v001_genomic.fna.gz
-		echo "Downloading done. Uncompressing files... "
-		gunzip ./*fna.gz
-
-		find "$(pwd)" -name '*.fna' > ../.fungi
-	  	cd ../
-	  	if  [ ! -s .fungi ]; then
-	  		echo "Error: Failed to download fungi sequences. "
-	  		exit
-	  	fi
-	  	echo "Fungi sequences downloaded!"
+	if command -v wget >/dev/null 2>&1; then
+		wget "$url"
+	elif command -v curl >/dev/null 2>&1; then
+		curl -fLO "$url"
 	else
-		echo "Fungi sequences already in $DBDR."
+		die "neither wget nor curl is available"
 	fi
-	exit
+
+	[ -s "$output" ] || die "failed to download $url"
+	record_manifest "download" "$source" "$url" "$(pwd)/$output" "downloaded"
+}
+
+download_assembly_source() {
+	source="$1"
+	summary_url="https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$source/assembly_summary.txt"
+	summary_file="assembly_summary.$source.txt"
+	urls_file=".$DB.$source.urls"
+
+	fetch_to_file "$summary_url" "$summary_file" "$source"
+	if [ "$DRY_RUN" = "1" ]; then
+		record_provenance "$source" "assembly_summary" "NA" "Complete Genome" "latest" "$summary_url"
+		return 0
+	fi
+
+	awk -F '\t' -v db="$DB" -v source="$source" -v provenance="$PROVENANCE" '
+		BEGIN { OFS = "\t" }
+		$12 == "Complete Genome" && $11 == "latest" && $20 != "" {
+			n = split($20, path_parts, "/")
+			url = $20 "/" path_parts[n] "_genomic.fna.gz"
+			print db, source, $1, $15, $12, $11, url >> provenance
+			print url
+		}
+	' "$summary_file" > "$urls_file"
+
+	while IFS= read -r genome_url || [ -n "$genome_url" ]; do
+		[ -n "$genome_url" ] || continue
+		fetch_url "$genome_url" "$source"
+	done < "$urls_file"
+
+	rm -f "$summary_file" "$urls_file"
+}
+
+download_static_urls() {
+	if [ ! -f "$STATIC_URLS_FILE" ]; then
+		case "$DB" in
+			plasmid|plastid|fungi|human)
+				die "missing static URL manifest: $STATIC_URLS_FILE"
+				;;
+			*)
+				return 0
+				;;
+		esac
+	fi
+
+	awk -v db="$DB" '
+		BEGIN { FS = "\t" }
+		$0 !~ /^#/ && NF >= 3 && $1 == db { print $2 " " $3 }
+	' "$STATIC_URLS_FILE" | while read -r source genome_url; do
+		[ -n "$genome_url" ] || continue
+		record_provenance "$source" "$(accession_from_url "$genome_url")" "NA" "static" "latest" "$genome_url"
+		fetch_url "$genome_url" "$source"
+	done
+}
+
+decompress_gz_files() {
+	find "$(pwd)" -type f -name '*.gz' -print | while IFS= read -r gz_file || [ -n "$gz_file" ]; do
+		[ -n "$gz_file" ] || continue
+		gunzip "$gz_file"
+	done
+}
+
+split_fna_records() {
+	find "$(pwd)" -type f -name '*.fna' -print | while IFS= read -r fasta_file || [ -n "$fasta_file" ]; do
+		[ -n "$fasta_file" ] || continue
+		"$DIR/exe/exeSeq" "$fasta_file" ./
+	done
+}
+
+write_sequence_marker() {
+	find "$(pwd)" -name "$(sequence_pattern)" > "$MARKER"
+}
+
+if [ "$DRY_RUN" != "1" ] && [ -s "$MARKER" ]; then
+	echo "$(display_name "$DB") sequences already in $DBDR."
+	exit 0
 fi
 
-if [ "$DB" = "protozoa" ]; then
-	if [ ! -s "$DBDR/.protozoa" ]; then
-		rm -Rf "$DBDR/Protozoa" "$DBDR"/.protozoa.*
-		mkdir -m 775 "$DBDR/Protozoa"
-		cd "$DBDR/Protozoa/" || exit
-		echo "Downloading now RefSeq protozoa complete genomes:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$DB/assembly_summary.txt
-		awk -F "\t" '$12=="Complete Genome" && $11=="latest" {print $20}' assembly_summary.txt > ".$DB.tmp"
-		"$DIR/exe/dscriptMaker" ".$DB.tmp" > ./download.sh
-		chmod 711 ./download.sh
-		./download.sh 2> ".$DB.tmp"
-		rm -f ".$DB.tmp" ./download.sh ./assembly_summary.txt
-		echo "Downloading done. Uncompressing files... "
-		gunzip ./*fna.gz
-
-		find "$(pwd)" -name '*.fna' > ../.protozoa
-		cd ../
-		if  [ ! -s .protozoa ]; then
-				echo "Error: Failed to download protozoa sequences. "
-				exit
-		fi
-		echo "Protozoa sequences downloaded!"
-	else
-		echo "Protozoa sequences already in $DBDR."
-	fi
-	exit
+DATA_DIR="$DBDR/$(db_directory_name "$DB")"
+if [ "$DRY_RUN" = "1" ]; then
+	echo "Dry run: planning $(display_name "$DB") RefSeq downloads."
+else
+	rm -Rf "$DATA_DIR" "$DBDR"/".$DB".*
+	mkdir -m 775 "$DATA_DIR"
+	cd "$DATA_DIR" || exit 1
+	echo "Downloading now $(display_name "$DB") RefSeq genomes."
 fi
 
-if [ "$DB" = "human" ]; then
-	if [ ! -s "$DBDR/.human" ]; then
-		rm -Rf "$DBDR/Human" "$DBDR"/.human.*
-		mkdir -m 775 "$DBDR/Human"
-		cd "$DBDR/Human/" || exit
-		echo "Downloading now latest Human genome:"
-		wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.fna.gz
-		echo "Downloading done. Uncompressing files... "
-	  	gunzip ./*fna.gz
+init_reports
 
-		find "$(pwd)" -name '*.fna' > ../.human
-	  	cd ../
-	  	if  [ ! -s .human ]; then
-	  		echo "Error: Failed to download human sequences. "
-	  		exit
-	  	fi
-	  	echo "Human genome downloaded!"
-	else
-		echo "Human genome already in $DBDR."
-	fi
-	exit
+for source in $(assembly_sources); do
+	download_assembly_source "$source"
+done
+download_static_urls
+
+if [ "$DRY_RUN" = "1" ]; then
+	echo "Dry run complete."
+	echo "Download manifest: $MANIFEST"
+	echo "Provenance: $PROVENANCE"
+	exit 0
 fi
 
-echo "Failed to recognize parameter: $DB. Please choose between: bacteria, viruses, plasmid, plastid, protozoa, fungi or human."
+echo "Downloading done. Uncompressing files..."
+decompress_gz_files
+
+if needs_sequence_split; then
+	echo "Processing sequences..."
+	split_fna_records
+fi
+
+write_sequence_marker
+[ -s "$MARKER" ] || die "failed to download $(display_name "$DB") sequences"
+echo "$(display_name "$DB") sequences downloaded!"

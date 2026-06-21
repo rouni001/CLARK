@@ -176,6 +176,6 @@ case "$VARIANT" in
 esac
 
 CLARK_EXE="$EXE_DIR/$CLARK_BINARY"
-[ -x "$CLARK_EXE" ] || die "missing executable '$CLARK_EXE'. Run scripts/install.sh first."
+[ -x "$CLARK_EXE" ] || die "missing executable '$CLARK_EXE'. Run 'make all' from the CLARK repository root first."
 
 "$CLARK_EXE" "${PARAMS[@]}"

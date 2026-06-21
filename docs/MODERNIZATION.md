@@ -6,7 +6,7 @@ reliable for researchers who are not bioinformatics specialists.
 ## Critical Issues Addressed
 
 1. **Unreliable installation and hidden build behavior**
-   - Added a `Makefile` used by both `make` and `scripts/install.sh`.
+   - Added a `Makefile` and made `make all` the canonical build command.
    - Added explicit OpenMP detection and clear single-threaded fallback.
    - Generated binaries now live under ignored `exe/` output instead of being
      treated as source artifacts.
