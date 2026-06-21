@@ -46,6 +46,8 @@ die() {
 DRY_RUN=${CLARK_REFSEQ_DRY_RUN:-0}
 THREADS=${CLARK_REFSEQ_THREADS:-8}
 RESUME=${CLARK_REFSEQ_RESUME:-1}
+DOWNLOAD_ATTEMPTS=${CLARK_REFSEQ_DOWNLOAD_ATTEMPTS:-5}
+RETRY_DELAY=${CLARK_REFSEQ_RETRY_DELAY:-2}
 REFSEQ_CATEGORY=${CLARK_REFSEQ_CATEGORY:-all}
 ASSEMBLY_LEVEL=${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}
 
@@ -92,6 +94,15 @@ case "$THREADS" in
 	''|*[!0-9]*) die "--threads must be a positive integer" ;;
 esac
 [ "$THREADS" -gt 0 ] || die "--threads must be a positive integer"
+
+case "$DOWNLOAD_ATTEMPTS" in
+	''|*[!0-9]*) die "CLARK_REFSEQ_DOWNLOAD_ATTEMPTS must be a positive integer" ;;
+esac
+[ "$DOWNLOAD_ATTEMPTS" -gt 0 ] || die "CLARK_REFSEQ_DOWNLOAD_ATTEMPTS must be a positive integer"
+
+case "$RETRY_DELAY" in
+	''|*[!0-9]*) die "CLARK_REFSEQ_RETRY_DELAY must be a non-negative integer" ;;
+esac
 
 case "$REFSEQ_CATEGORY" in
 	all|representative|reference) ;;
@@ -221,6 +232,32 @@ fetch_to_file() {
 	record_manifest "metadata" "$source" "$url" "$output" "downloaded"
 }
 
+valid_gzip_archive() {
+	[ -s "$1" ] || return 1
+	gzip -t "$1" >/dev/null 2>&1
+}
+
+run_sequence_download_once() {
+	url="$1"
+	partial="$2"
+
+	if command -v wget >/dev/null 2>&1; then
+		if [ "$RESUME" = "1" ] && [ -s "$partial" ]; then
+			wget -q -c -O "$partial" "$url"
+		else
+			wget -q -O "$partial" "$url"
+		fi
+	elif command -v curl >/dev/null 2>&1; then
+		if [ "$RESUME" = "1" ] && [ -s "$partial" ]; then
+			curl -fsSL --retry 3 -C - -o "$partial" "$url"
+		else
+			curl -fsSL --retry 3 -o "$partial" "$url"
+		fi
+	else
+		die "neither wget nor curl is available"
+	fi
+}
+
 fetch_url_to_status() {
 	url="$1"
 	source="$2"
@@ -228,8 +265,12 @@ fetch_url_to_status() {
 	output=${url##*/}
 
 	if [ -s "$output" ]; then
-		record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "skipped-existing"
-		return 0
+		if ! valid_gzip_archive "$output"; then
+			rm -f "$output"
+		else
+			record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "skipped-existing"
+			return 0
+		fi
 	fi
 	if [ "${output%.gz}" != "$output" ] && [ -s "${output%.gz}" ]; then
 		record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/${output%.gz}" "skipped-existing"
@@ -241,40 +282,26 @@ fetch_url_to_status() {
 		rm -f "$partial"
 	fi
 
-	if command -v wget >/dev/null 2>&1; then
-		if [ "$RESUME" = "1" ]; then
-			if ! wget -q -c -O "$partial" "$url"; then
-				echo "Failed to download $url" >&2
-				return 1
-			fi
-		else
-			if ! wget -q -O "$partial" "$url"; then
-				echo "Failed to download $url" >&2
-				return 1
-			fi
+	attempt=1
+	while [ "$attempt" -le "$DOWNLOAD_ATTEMPTS" ]; do
+		if run_sequence_download_once "$url" "$partial"; then
+			:
 		fi
-	elif command -v curl >/dev/null 2>&1; then
-		if [ "$RESUME" = "1" ]; then
-			if ! curl -fsSL --retry 3 -C - -o "$partial" "$url"; then
-				echo "Failed to download $url" >&2
-				return 1
-			fi
-		else
-			if ! curl -fsSL --retry 3 -o "$partial" "$url"; then
-				echo "Failed to download $url" >&2
-				return 1
-			fi
+		if valid_gzip_archive "$partial"; then
+			mv "$partial" "$output"
+			record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "downloaded"
+			return 0
 		fi
-	else
-		die "neither wget nor curl is available"
-	fi
+		rm -f "$partial"
+		if [ "$attempt" -lt "$DOWNLOAD_ATTEMPTS" ] && [ "$RETRY_DELAY" -gt 0 ]; then
+			sleep $((RETRY_DELAY * attempt))
+		fi
+		attempt=$((attempt + 1))
+	done
 
-	if [ ! -s "$partial" ]; then
-		echo "Failed to download $url" >&2
-		return 1
-	fi
-	mv "$partial" "$output"
-	record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "downloaded"
+	echo "Failed to download $url after $DOWNLOAD_ATTEMPTS attempt(s)" >&2
+	rm -f "$partial"
+	return 1
 }
 
 download_assembly_source() {
@@ -383,11 +410,21 @@ report_download_progress() {
 	completed="$1"
 	total="$2"
 	if [ "$total" -eq 0 ]; then
-		echo "RefSeq download progress: 0/0 files complete (100%)."
+		message="RefSeq download progress: 0/0 files complete (100%)."
+		if [ -t 1 ]; then printf '\r%s\n' "$message"; else echo "$message"; fi
 		return 0
 	fi
 	percent=$((completed * 100 / total))
-	echo "RefSeq download progress: $completed/$total files complete ($percent%)."
+	message="RefSeq download progress: $completed/$total files complete ($percent%)."
+	if [ -t 1 ]; then
+		if [ "$completed" -ge "$total" ]; then
+			printf '\r%s\n' "$message"
+		else
+			printf '\r%s' "$message"
+		fi
+	else
+		echo "$message"
+	fi
 }
 
 download_url_list() {
@@ -409,8 +446,9 @@ download_url_list() {
 	job_count=0
 	job_index=0
 	completed=0
-	progress_step=$((total / 20))
+	progress_step=$((total / 100))
 	[ "$progress_step" -gt 0 ] || progress_step=1
+	[ "$progress_step" -le 100 ] || progress_step=100
 	next_report="$progress_step"
 	report_download_progress 0 "$total"
 	while IFS='	' read -r source genome_url || [ -n "$genome_url" ]; do
@@ -437,7 +475,7 @@ download_url_list() {
 	fi
 
 	if [ -n "$(find "$status_dir" -type f -print -quit)" ]; then
-		cat "$status_dir"/*.tsv >> "$MANIFEST"
+		find "$status_dir" -type f -name '*.tsv' -exec cat {} + >> "$MANIFEST"
 	fi
 	rm -rf "$status_dir"
 }

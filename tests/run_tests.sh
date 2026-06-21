@@ -608,6 +608,140 @@ STUB
 	pass "RefSeq downloader uses quiet network commands and aggregate progress"
 }
 
+test_refseq_downloader_retries_parallel_transient_failures() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-parallel-retry-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	state="$tmp/state"
+	mkdir -p "$bindir" "$state"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet|-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			for i in 1 2 3 4 5 6 7 8 9 10; do
+				printf 'GCF_100000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tRetry%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_100000%03d.1_Retry%d/\n' "$i" "$i" "$i" "$i" "$i"
+			done
+		} > "$out"
+		;;
+	*_genomic.fna.gz)
+		base="${url##*/}"
+		case "$base" in
+			GCF_10000000[3-7].1_*)
+				marker="$CLARK_TEST_STATE/$base.failed-once"
+				if mkdir "$marker" 2>/dev/null; then
+					printf 'partial transfer for %s\n' "$base" > "$out"
+					exit 1
+				fi
+				;;
+		esac
+		printf '>retry-virus\nACGT\n' | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_STATE="$state" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+	CLARK_REFSEQ_RETRY_DELAY=0 \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 8 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
+
+	count=$(find "$dbdir/Viruses" -type f -name '*.fna' | wc -l | tr -d ' ')
+	[ "$count" = "10" ] || fail "RefSeq downloader did not recover all transient parallel download failures"
+	if find "$dbdir/Viruses" -type f -name '*.part' -print -quit | grep -q .; then
+		fail "RefSeq downloader left .part files after successful retries"
+	fi
+	grep -Fq "GCF_100000003.1_Retry3_genomic.fna" "$dbdir/.viruses" ||
+		fail "RefSeq downloader did not list a retried and decompressed FASTA"
+	pass "RefSeq downloader retries transient parallel failures and finalizes archives"
+}
+
+test_refseq_downloader_reports_early_parallel_progress() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-progress-refresh-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet|-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			for i in $(seq 1 200); do
+				printf 'GCF_200000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tProgress%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_200000%03d.1_Progress%d/\n' "$i" "$i" "$i" "$i" "$i"
+			done
+		} > "$out"
+		;;
+	*_genomic.fna.gz)
+		printf '>progress-virus\nACGT\n' | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 8 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
+
+	grep -Fq "RefSeq download progress: 8/200 files complete" "$tmp/stdout" ||
+		fail "RefSeq downloader did not report progress after the first completed parallel batch"
+	grep -Fq "RefSeq download progress: 200/200 files complete (100%)." "$tmp/stdout" ||
+		fail "RefSeq downloader did not report final aggregate completion"
+	pass "RefSeq downloader refreshes aggregate progress during parallel downloads"
+}
+
 test_refseq_downloader_mocked_assembly_summary() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-mocked-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1163,6 +1297,8 @@ test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
 test_refseq_downloader_rejects_malformed_urls_before_download
 test_refseq_downloader_quiet_aggregate_progress
+test_refseq_downloader_retries_parallel_transient_failures
+test_refseq_downloader_reports_early_parallel_progress
 test_refseq_downloader_mocked_assembly_summary
 test_refseq_downloader_filters_and_resumes
 test_make_metadata_uses_refseq_provenance_taxids
