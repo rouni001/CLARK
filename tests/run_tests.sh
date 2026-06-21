@@ -447,6 +447,67 @@ test_update_taxonomy_requires_db_directory() {
 	pass "updateTaxonomy reports missing database configuration"
 }
 
+create_refseq_success_wget_stub() {
+	local bindir="$1"
+	mkdir -p "$bindir"
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+quiet=0
+out=""
+url=""
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		-q|--quiet)
+			quiet=1
+			shift
+			;;
+		-c)
+			shift
+			;;
+		-O)
+			out="$2"
+			shift 2
+			;;
+		*)
+			url="$1"
+			shift
+			;;
+	esac
+done
+[ -n "$out" ] || {
+	echo "wget stub missing -O output for $url" >&2
+	exit 1
+}
+if [ -n "${CLARK_TEST_WGET_LOG:-}" ]; then
+	printf 'quiet=%s url=%s\n' "$quiet" "$url" >> "$CLARK_TEST_WGET_LOG"
+fi
+case "$url" in
+	*/viral/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			printf 'GCF_900000001.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMatrix virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMatrixVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_900000001.1_MatrixVirus/\n'
+		} > "$out"
+		;;
+	*/protozoa/assembly_summary.txt)
+		{
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+			printf 'GCF_900000002.1\tna\tna\tna\trepresentative genome\t5759\t5759\tMatrix protozoan\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-02\tMatrixProtozoa\tCLARK\tna\tna\thttps://example.org/refseq/GCF_900000002.1_MatrixProtozoa/\n'
+		} > "$out"
+		;;
+	*.fna.gz)
+		file="${url##*/}"
+		printf '>%s synthetic reference\nACGTACGT\n' "${file%.gz}" | gzip > "$out"
+		;;
+	*)
+		echo "unexpected URL: $url" >&2
+		exit 1
+		;;
+esac
+STUB
+	chmod +x "$bindir/wget"
+}
+
 test_refseq_downloader_dry_run_manifest() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-dry-run-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -742,64 +803,62 @@ STUB
 	pass "RefSeq downloader refreshes aggregate progress during parallel downloads"
 }
 
-test_refseq_downloader_mocked_assembly_summary() {
-	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-mocked-test.XXXXXX")"
+test_refseq_downloader_success_matrix() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-success-matrix-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
 
-	dbdir="$tmp/db"
 	bindir="$tmp/bin"
 	log="$tmp/wget.log"
-	mkdir -p "$bindir"
+	static_urls="$tmp/static-urls.tsv"
+	create_refseq_success_wget_stub "$bindir"
+	{
+		printf 'plasmid\trefseq_static\thttps://example.org/static/plasmid.1.1.genomic.fna.gz\n'
+		printf 'plastid\trefseq_static\thttps://example.org/static/plastid.1.1.genomic.fna.gz\n'
+	} > "$static_urls"
 
-	cat > "$bindir/wget" <<'STUB'
-#!/usr/bin/env bash
-set -euo pipefail
-while [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ] || [ "${1:-}" = "-c" ]; do
-	shift
-done
-if [ "$1" = "-O" ]; then
-	out="$2"
-	url="$3"
-	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
-	case "$url" in
-		*/assembly_summary.txt)
-			{
-				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-				printf 'GCF_999999999.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2024-01-02\tMockVirus1\tCLARK\tna\tna\thttps://example.org/refseq/GCF_999999999.1_MockVirus1/\n'
-				printf 'GCF_000000000.1\tna\tna\tna\trepresentative genome\t10239\t10239\tOld virus\tna\tna\treplaced\tComplete Genome\tMajor\tFull\t2020-01-02\tOldVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000000.1_OldVirus\n'
-			} > "$out"
-			;;
-		*_genomic.fna.gz)
-			printf '>mock-virus\nACGT\n' | gzip > "$out"
-			;;
-		*)
-			echo "unexpected wget -O URL: $url" >&2
-			exit 1
-			;;
-	esac
-else
-	url="$1"
-	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
-	file="${url##*/}"
-	printf '>mock-virus\nACGT\n' | gzip > "$file"
-fi
-STUB
-	chmod +x "$bindir/wget"
+	for db in viruses plasmid plastid protozoa; do
+		dbdir="$tmp/db-$db"
+		PATH="$bindir:$PATH" \
+		CLARK_TEST_WGET_LOG="$log" \
+		CLARK_REFSEQ_STATIC_URLS="$static_urls" \
+			"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 4 "$dbdir" "$db" > "$tmp/$db.out" 2> "$tmp/$db.err"
 
-	PATH="$bindir:$PATH" \
-	CLARK_TEST_WGET_LOG="$log" \
-	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
-		"$REPO_DIR/scripts/download_RefSeqDB.sh" "$dbdir" viruses > "$tmp/downloader.out"
-
-	require_file "$dbdir/.viruses"
-	grep -Fq "GCF_999999999.1_MockVirus1_genomic.fna" "$dbdir/.viruses" || fail "RefSeq downloader did not list decompressed virus FASTA"
-	grep -Fq "https://example.org/refseq/GCF_999999999.1_MockVirus1/GCF_999999999.1_MockVirus1_genomic.fna.gz" "$dbdir/.viruses.download_manifest.tsv" ||
-		fail "RefSeq downloader did not normalize trailing slashes in assembly_summary ftp_path"
-	grep -Fq "GCF_999999999.1" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not record assembly accession provenance"
-	grep -Fq "2024-01-02" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not preserve assembly source date"
-	grep -Fq "downloaded" "$dbdir/.viruses.download_manifest.tsv" || fail "RefSeq downloader did not record completed downloads"
-	[ ! -e "$dbdir/Viruses/download.sh" ] || fail "RefSeq downloader generated a legacy download.sh script"
-	pass "RefSeq downloader uses mocked assembly summaries without generated scripts"
+		require_file "$dbdir/.$db"
+		require_file "$dbdir/.$db.download_manifest.tsv"
+		require_file "$dbdir/.$db.provenance.tsv"
+		grep -Fq "RefSeq download progress:" "$tmp/$db.out" || fail "RefSeq downloader did not report progress for $db"
+		grep -Fq "downloaded" "$dbdir/.$db.download_manifest.tsv" || fail "RefSeq downloader did not record completed downloads for $db"
+		if find "$dbdir" -type f -name '*.part' -print -quit | grep -q .; then
+			fail "RefSeq downloader left partial files for $db"
+		fi
+		case "$db" in
+			viruses)
+				data_dir="Viruses"
+				grep -Fq "GCF_900000001.1_MatrixVirus_genomic.fna" "$dbdir/.viruses" || fail "RefSeq downloader did not list decompressed virus FASTA"
+				grep -Fq "2026-06-01" "$dbdir/.viruses.provenance.tsv" || fail "RefSeq downloader did not preserve virus source date"
+				;;
+			protozoa)
+				data_dir="Protozoa"
+				grep -Fq "GCF_900000002.1_MatrixProtozoa_genomic.fna" "$dbdir/.protozoa" || fail "RefSeq downloader did not list decompressed protozoa FASTA"
+				grep -Fq "2026-06-02" "$dbdir/.protozoa.provenance.tsv" || fail "RefSeq downloader did not preserve protozoa source date"
+				;;
+			plasmid)
+				data_dir="Plasmid"
+				[ "$(find "$dbdir" -type f -name '*.fa' | wc -l | tr -d ' ')" -gt 0 ] || fail "RefSeq downloader did not split $db FASTA records"
+				grep -Fq "$db.1.1.genomic" "$dbdir/.$db.provenance.tsv" || fail "RefSeq downloader did not record static $db provenance"
+				;;
+			plastid)
+				data_dir="Plastid"
+				[ "$(find "$dbdir" -type f -name '*.fa' | wc -l | tr -d ' ')" -gt 0 ] || fail "RefSeq downloader did not split $db FASTA records"
+				grep -Fq "$db.1.1.genomic" "$dbdir/.$db.provenance.tsv" || fail "RefSeq downloader did not record static $db provenance"
+				;;
+		esac
+		[ ! -e "$dbdir/$data_dir/download.sh" ] || fail "RefSeq downloader generated a legacy download.sh script for $db"
+	done
+	if grep -Fq "quiet=0" "$log"; then
+		fail "RefSeq downloader success matrix invoked wget without quiet mode"
+	fi
+	pass "RefSeq downloader completes viruses, plasmid, plastid, and protozoa downloads"
 }
 
 test_refseq_downloader_filters_and_resumes() {
@@ -1299,7 +1358,7 @@ test_refseq_downloader_rejects_malformed_urls_before_download
 test_refseq_downloader_quiet_aggregate_progress
 test_refseq_downloader_retries_parallel_transient_failures
 test_refseq_downloader_reports_early_parallel_progress
-test_refseq_downloader_mocked_assembly_summary
+test_refseq_downloader_success_matrix
 test_refseq_downloader_filters_and_resumes
 test_make_metadata_uses_refseq_provenance_taxids
 test_documentation_script_paths
