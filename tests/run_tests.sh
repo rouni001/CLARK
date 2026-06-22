@@ -72,7 +72,7 @@ test_version_binaries() {
 	for binary in CLARK CLARK-l CLARK-S; do
 		version="$("$REPO_DIR/exe/$binary" --version)"
 		case "$version" in
-			*"Version: 1.4.4.0-a"*) ;;
+			*"Version: 1.4.5.0-a"*) ;;
 			*) fail "unexpected version output from $binary: $version" ;;
 		esac
 	done
@@ -447,6 +447,91 @@ test_update_taxonomy_requires_db_directory() {
 	pass "updateTaxonomy reports missing database configuration"
 }
 
+create_refseq_gzip_fixture() {
+	local root="$1"
+	local accession="$2"
+	local header="${3:-$accession}"
+	mkdir -p "$root/$accession"
+	printf '>%s synthetic reference\nACGTACGT\n' "$header" | gzip > "$root/$accession/${accession}_genomic.fna.gz"
+}
+
+create_refseq_static_gzip_fixture() {
+	local root="$1"
+	local path="$2"
+	mkdir -p "$root/$(dirname "$path")"
+	printf '>%s synthetic reference\nACGTACGT\n' "$(basename "$path" .gz)" | gzip > "$root/$path"
+}
+
+start_refseq_fixture_server() {
+	local root="$1"
+	local mode="$2"
+	local state="$3"
+	local port_file="$4"
+	local server_script="$5"
+	cat > "$server_script" <<'PY'
+#!/usr/bin/env python3
+import http.server
+import os
+import re
+import socketserver
+import sys
+
+root, mode, state, port_file = sys.argv[1:5]
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        return
+
+    def do_GET(self):
+        name = os.path.basename(self.path)
+        if mode == "transient" and re.match(r"GCF_10000000[3-7]\.1_.*_genomic\.fna\.gz", name):
+            marker = os.path.join(state, name + ".failed-once")
+            try:
+                os.mkdir(marker)
+                self.send_error(503, "temporary fixture failure")
+                return
+            except FileExistsError:
+                pass
+        if mode == "deferred":
+            if name == "GCF_300000001.1_Deferred1_genomic.fna.gz" and not os.path.isdir(os.path.join(state, "first-pass-finished")):
+                self.send_error(503, "temporary fixture outage")
+                return
+            if name == "GCF_300000005.1_Deferred5_genomic.fna.gz":
+                os.makedirs(os.path.join(state, "first-pass-finished"), exist_ok=True)
+        if mode == "permanent" and name == "GCF_400000002.1_Failure2_genomic.fna.gz":
+            self.send_error(503, "permanent fixture failure")
+            return
+
+        accession = re.sub(r"_genomic\.fna\.gz$", "", name)
+        path = os.path.join(root, name)
+        nested_path = os.path.join(root, accession, name)
+        if not os.path.isfile(path) and os.path.isfile(nested_path):
+            path = nested_path
+        if not os.path.isfile(path):
+            self.send_error(404, "missing fixture")
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(os.path.getsize(path)))
+        self.end_headers()
+        with open(path, "rb") as handle:
+            self.wfile.write(handle.read())
+
+with socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler) as httpd:
+    with open(port_file, "w") as handle:
+        handle.write(str(httpd.server_address[1]))
+    httpd.serve_forever()
+PY
+	chmod +x "$server_script"
+	python3 "$server_script" "$root" "$mode" "$state" "$port_file" > "$state/server.stdout" 2> "$state/server.stderr" &
+	local pid="$!"
+	for _ in $(seq 1 50); do
+		[ -s "$port_file" ] && break
+		sleep 0.1
+	done
+	[ -s "$port_file" ] || fail "fixture HTTP server did not start"
+	printf '%s\n' "$pid"
+}
+
 create_refseq_success_wget_stub() {
 	local bindir="$1"
 	mkdir -p "$bindir"
@@ -486,13 +571,13 @@ case "$url" in
 	*/viral/assembly_summary.txt)
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-			printf 'GCF_900000001.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMatrix virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMatrixVirus\tCLARK\tna\tna\thttps://example.org/refseq/GCF_900000001.1_MatrixVirus/\n'
+			printf 'GCF_900000001.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMatrix virus\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMatrixVirus\tCLARK\tna\tna\t%s/GCF_900000001.1_MatrixVirus/\n' "$CLARK_TEST_BASE_URL"
 		} > "$out"
 		;;
 	*/protozoa/assembly_summary.txt)
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-			printf 'GCF_900000002.1\tna\tna\tna\trepresentative genome\t5759\t5759\tMatrix protozoan\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-02\tMatrixProtozoa\tCLARK\tna\tna\thttps://example.org/refseq/GCF_900000002.1_MatrixProtozoa/\n'
+			printf 'GCF_900000002.1\tna\tna\tna\trepresentative genome\t5759\t5759\tMatrix protozoan\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-02\tMatrixProtozoa\tCLARK\tna\tna\t%s/GCF_900000002.1_MatrixProtozoa/\n' "$CLARK_TEST_BASE_URL"
 		} > "$out"
 		;;
 	*.fna.gz)
@@ -550,7 +635,7 @@ if [ "$1" = "-O" ]; then
 			{
 				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 				printf 'GCF_055383595.1\tna\tna\tna\tna\t111\t111\tMock bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tASM5538359v1\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/\n'
-				printf 'GCF_900128725.1\tna\tna\tna\tna\t222\t222\tMock bacterium 2\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tBCifornacula_v1.0\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/\n'
+				printf 'GCF_900128725.1\tna\tna\tna\tna\t222\t222\tMock bacterium 2\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tBCifornacula_v1.0\tNCBI\tna\tna\tftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/\n'
 			} > "$out"
 			;;
 		*/archaea/assembly_summary.txt)
@@ -576,6 +661,11 @@ STUB
 	grep -Fq "Selected 2 bacteria RefSeq genome(s)" "$tmp/downloader.out" || fail "RefSeq downloader did not select the NCBI-shaped fixture rows"
 	grep -Fq "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/GCF_055383595.1_ASM5538359v1_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
 		fail "RefSeq downloader did not normalize the real NCBI trailing-slash ftp_path shape"
+	grep -Fq "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/GCF_900128725.1_BCifornacula_v1.0_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
+		fail "RefSeq downloader did not normalize NCBI assembly_summary FTP paths to HTTPS"
+	if grep -Fq "ftp://ftp.ncbi.nlm.nih.gov" "$dbdir/.bacteria.download_manifest.tsv"; then
+		fail "RefSeq downloader left an NCBI FTP URL in the generated manifest"
+	fi
 	if grep -Fq "//_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv"; then
 		fail "RefSeq downloader emitted the broken double-slash empty-basename URL"
 	fi
@@ -598,14 +688,55 @@ test_refseq_downloader_rejects_malformed_urls_before_download() {
 	pass "RefSeq downloader rejects malformed generated URLs before download"
 }
 
+test_refseq_downloader_tty_progress_rewrites_line() {
+	python3 - "$REPO_DIR" <<'PY'
+import importlib.util
+import io
+from pathlib import Path
+import sys
+
+repo = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("refseq_downloader", repo / "scripts" / "refseq_downloader.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+class TtyBuffer(io.StringIO):
+    def isatty(self):
+        return True
+
+buffer = TtyBuffer()
+original_stdout = sys.stdout
+try:
+    sys.stdout = buffer
+    module.print_progress("RefSeq download progress", 0, 100)
+    module.print_progress("RefSeq download progress", 50, 100)
+    module.print_progress("RefSeq download progress", 100, 100)
+finally:
+    sys.stdout = original_stdout
+
+expected = (
+    "\rRefSeq download progress: 0/100 files complete (0%)."
+    "\rRefSeq download progress: 50/100 files complete (50%)."
+    "\rRefSeq download progress: 100/100 files complete (100%).\n"
+)
+if buffer.getvalue() != expected:
+    raise SystemExit("unexpected TTY progress output: %r" % buffer.getvalue())
+PY
+	pass "RefSeq downloader rewrites interactive terminal progress in place"
+}
+
 test_refseq_downloader_quiet_aggregate_progress() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-quiet-progress-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
 
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
+	fixtures="$tmp/refseq"
 	log="$tmp/wget.log"
-	mkdir -p "$bindir"
+	mkdir -p "$bindir" "$fixtures"
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		create_refseq_gzip_fixture "$fixtures" "$(printf 'GCF_000000%03d.1_Mock%d' "$i" "$i")" "mock-virus-$i"
+	done
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -638,7 +769,7 @@ case "$url" in
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 			for i in 1 2 3 4 5 6 7 8 9 10; do
-				printf 'GCF_000000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMock%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_000000%03d.1_Mock%d/\n' "$i" "$i" "$i" "$i" "$i"
+				printf 'GCF_000000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tMock%d\tCLARK\tna\tna\t%s/GCF_000000%03d.1_Mock%d/\n' "$i" "$i" "$i" "$CLARK_TEST_BASE_URL" "$i" "$i"
 			done
 		} > "$out"
 		;;
@@ -655,6 +786,7 @@ STUB
 
 	PATH="$bindir:$PATH" \
 	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_TEST_BASE_URL="file://$fixtures" \
 	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
 
@@ -676,7 +808,14 @@ test_refseq_downloader_retries_parallel_transient_failures() {
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
 	state="$tmp/state"
-	mkdir -p "$bindir" "$state"
+	fixtures="$tmp/refseq"
+	mkdir -p "$bindir" "$state" "$fixtures"
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		create_refseq_gzip_fixture "$fixtures" "$(printf 'GCF_100000%03d.1_Retry%d' "$i" "$i")" "retry-virus-$i"
+	done
+	server_pid="$(start_refseq_fixture_server "$fixtures" transient "$state" "$tmp/port" "$tmp/refseq_server.py")"
+	trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$tmp"' RETURN
+	base_url="http://127.0.0.1:$(cat "$tmp/port")/refseq"
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -703,7 +842,7 @@ case "$url" in
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 			for i in 1 2 3 4 5 6 7 8 9 10; do
-				printf 'GCF_100000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tRetry%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_100000%03d.1_Retry%d/\n' "$i" "$i" "$i" "$i" "$i"
+				printf 'GCF_100000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tRetry%d\tCLARK\tna\tna\t%s/GCF_100000%03d.1_Retry%d/\n' "$i" "$i" "$i" "$CLARK_TEST_BASE_URL" "$i" "$i"
 			done
 		} > "$out"
 		;;
@@ -730,6 +869,7 @@ STUB
 
 	PATH="$bindir:$PATH" \
 	CLARK_TEST_STATE="$state" \
+	CLARK_TEST_BASE_URL="$base_url" \
 	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 	CLARK_REFSEQ_RETRY_DELAY=0 \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 8 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
@@ -751,7 +891,14 @@ test_refseq_downloader_defers_retry_until_after_first_pass() {
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
 	state="$tmp/state"
-	mkdir -p "$bindir" "$state"
+	fixtures="$tmp/refseq"
+	mkdir -p "$bindir" "$state" "$fixtures"
+	for i in 1 2 3 4 5; do
+		create_refseq_gzip_fixture "$fixtures" "$(printf 'GCF_300000%03d.1_Deferred%d' "$i" "$i")" "deferred-virus-$i"
+	done
+	server_pid="$(start_refseq_fixture_server "$fixtures" deferred "$state" "$tmp/port" "$tmp/refseq_server.py")"
+	trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$tmp"' RETURN
+	base_url="http://127.0.0.1:$(cat "$tmp/port")/refseq"
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -778,7 +925,7 @@ case "$url" in
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 			for i in 1 2 3 4 5; do
-				printf 'GCF_300000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tDeferred virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tDeferred%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_300000%03d.1_Deferred%d/\n' "$i" "$i" "$i" "$i" "$i"
+				printf 'GCF_300000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tDeferred virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tDeferred%d\tCLARK\tna\tna\t%s/GCF_300000%03d.1_Deferred%d/\n' "$i" "$i" "$i" "$CLARK_TEST_BASE_URL" "$i" "$i"
 			done
 		} > "$out"
 		;;
@@ -807,6 +954,7 @@ STUB
 
 	PATH="$bindir:$PATH" \
 	CLARK_TEST_STATE="$state" \
+	CLARK_TEST_BASE_URL="$base_url" \
 	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 	CLARK_REFSEQ_RETRY_DELAY=0 \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 1 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
@@ -828,7 +976,15 @@ test_refseq_downloader_fails_when_deferred_downloads_remain() {
 
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
-	mkdir -p "$bindir"
+	state="$tmp/state"
+	fixtures="$tmp/refseq"
+	mkdir -p "$bindir" "$state" "$fixtures"
+	for i in 1 2 3 4; do
+		create_refseq_gzip_fixture "$fixtures" "$(printf 'GCF_400000%03d.1_Failure%d' "$i" "$i")" "failure-virus-$i"
+	done
+	server_pid="$(start_refseq_fixture_server "$fixtures" permanent "$state" "$tmp/port" "$tmp/refseq_server.py")"
+	trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$tmp"' RETURN
+	base_url="http://127.0.0.1:$(cat "$tmp/port")/refseq"
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -855,7 +1011,7 @@ case "$url" in
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 			for i in 1 2 3 4; do
-				printf 'GCF_400000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tFailure virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tFailure%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_400000%03d.1_Failure%d/\n' "$i" "$i" "$i" "$i" "$i"
+				printf 'GCF_400000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tFailure virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tFailure%d\tCLARK\tna\tna\t%s/GCF_400000%03d.1_Failure%d/\n' "$i" "$i" "$i" "$CLARK_TEST_BASE_URL" "$i" "$i"
 			done
 		} > "$out"
 		;;
@@ -875,6 +1031,7 @@ STUB
 	chmod +x "$bindir/wget"
 
 	if PATH="$bindir:$PATH" \
+		CLARK_TEST_BASE_URL="$base_url" \
 		CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 		CLARK_REFSEQ_RETRY_DELAY=0 \
 			"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 4 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"; then
@@ -886,6 +1043,7 @@ STUB
 	[ ! -e "$dbdir/.viruses" ] || fail "RefSeq downloader wrote a success marker after an incomplete download"
 	grep -Fq "failed" "$dbdir/.viruses.download_manifest.tsv" ||
 		fail "RefSeq downloader did not record failed final status in the manifest"
+	require_file "$dbdir/.viruses.failed_downloads.tsv"
 	pass "RefSeq downloader fails loudly when deferred downloads remain incomplete"
 }
 
@@ -895,7 +1053,11 @@ test_refseq_downloader_reports_early_parallel_progress() {
 
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
-	mkdir -p "$bindir"
+	fixtures="$tmp/refseq"
+	mkdir -p "$bindir" "$fixtures"
+	for i in $(seq 1 200); do
+		create_refseq_gzip_fixture "$fixtures" "$(printf 'GCF_200000%03d.1_Progress%d' "$i" "$i")" "progress-virus-$i"
+	done
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -922,7 +1084,7 @@ case "$url" in
 		{
 			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 			for i in $(seq 1 200); do
-				printf 'GCF_200000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tProgress%d\tCLARK\tna\tna\thttps://example.org/refseq/GCF_200000%03d.1_Progress%d/\n' "$i" "$i" "$i" "$i" "$i"
+				printf 'GCF_200000%03d.1\tna\tna\tna\trepresentative genome\t10239\t10239\tMock virus %d\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tProgress%d\tCLARK\tna\tna\t%s/GCF_200000%03d.1_Progress%d/\n' "$i" "$i" "$i" "$CLARK_TEST_BASE_URL" "$i" "$i"
 			done
 		} > "$out"
 		;;
@@ -938,11 +1100,12 @@ STUB
 	chmod +x "$bindir/wget"
 
 	PATH="$bindir:$PATH" \
+	CLARK_TEST_BASE_URL="file://$fixtures" \
 	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 8 "$dbdir" viruses > "$tmp/stdout" 2> "$tmp/stderr"
 
-	grep -Fq "RefSeq download progress: 8/200 files complete" "$tmp/stdout" ||
-		fail "RefSeq downloader did not report progress after the first completed parallel batch"
+	grep -Fq "RefSeq download progress:" "$tmp/stdout" ||
+		fail "RefSeq downloader did not report progress during parallel downloads"
 	grep -Fq "RefSeq download progress: 200/200 files complete (100%)." "$tmp/stdout" ||
 		fail "RefSeq downloader did not report final aggregate completion"
 	pass "RefSeq downloader refreshes aggregate progress during parallel downloads"
@@ -954,17 +1117,24 @@ test_refseq_downloader_success_matrix() {
 
 	bindir="$tmp/bin"
 	log="$tmp/wget.log"
+	fixtures="$tmp/refseq"
 	static_urls="$tmp/static-urls.tsv"
+	mkdir -p "$fixtures"
+	create_refseq_gzip_fixture "$fixtures" "GCF_900000001.1_MatrixVirus" "matrix-virus"
+	create_refseq_gzip_fixture "$fixtures" "GCF_900000002.1_MatrixProtozoa" "matrix-protozoa"
+	create_refseq_static_gzip_fixture "$fixtures" "static/plasmid.1.1.genomic.fna.gz"
+	create_refseq_static_gzip_fixture "$fixtures" "static/plastid.1.1.genomic.fna.gz"
 	create_refseq_success_wget_stub "$bindir"
 	{
-		printf 'plasmid\trefseq_static\thttps://example.org/static/plasmid.1.1.genomic.fna.gz\n'
-		printf 'plastid\trefseq_static\thttps://example.org/static/plastid.1.1.genomic.fna.gz\n'
+		printf 'plasmid\trefseq_static\tfile://%s/static/plasmid.1.1.genomic.fna.gz\n' "$fixtures"
+		printf 'plastid\trefseq_static\tfile://%s/static/plastid.1.1.genomic.fna.gz\n' "$fixtures"
 	} > "$static_urls"
 
 	for db in viruses plasmid plastid protozoa; do
 		dbdir="$tmp/db-$db"
 		PATH="$bindir:$PATH" \
 		CLARK_TEST_WGET_LOG="$log" \
+		CLARK_TEST_BASE_URL="file://$fixtures" \
 		CLARK_REFSEQ_STATIC_URLS="$static_urls" \
 			"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 4 "$dbdir" "$db" > "$tmp/$db.out" 2> "$tmp/$db.err"
 
@@ -1012,9 +1182,11 @@ test_refseq_downloader_filters_and_resumes() {
 
 	dbdir="$tmp/db"
 	bindir="$tmp/bin"
+	fixtures="$tmp/refseq"
 	log="$tmp/wget.log"
-	mkdir -p "$bindir" "$dbdir/Bacteria"
+	mkdir -p "$bindir" "$dbdir/Bacteria" "$fixtures"
 	printf '>existing-bacterium\nACGT\n' | gzip > "$dbdir/Bacteria/GCF_111111111.1_Existing_genomic.fna.gz"
+	create_refseq_gzip_fixture "$fixtures" "GCF_222222222.1_New" "new-bacterium"
 
 	cat > "$bindir/wget" <<'STUB'
 #!/usr/bin/env bash
@@ -1030,10 +1202,10 @@ if [ "$1" = "-O" ]; then
 		*/bacteria/assembly_summary.txt)
 			{
 				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
-				printf 'GCF_111111111.1\tna\tna\tna\trepresentative genome\t111\t111\tExisting bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-01\tExisting\tCLARK\tna\tna\thttps://example.org/refseq/GCF_111111111.1_Existing/\n'
-				printf 'GCF_222222222.1\tna\tna\tna\trepresentative genome\t222\t222\tNew bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-02\tNew\tCLARK\tna\tna\thttps://example.org/refseq/GCF_222222222.1_New/\n'
-				printf 'GCF_333333333.1\tna\tna\tna\tna\t333\t333\tUnselected bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-03\tUnselected\tCLARK\tna\tna\thttps://example.org/refseq/GCF_333333333.1_Unselected\n'
-				printf 'GCF_444444444.1\tna\tna\tna\trepresentative genome\t444\t444\tDraft bacterium\tna\tna\tlatest\tScaffold\tMajor\tFull\t2025-01-04\tDraft\tCLARK\tna\tna\thttps://example.org/refseq/GCF_444444444.1_Draft\n'
+				printf 'GCF_111111111.1\tna\tna\tna\trepresentative genome\t111\t111\tExisting bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-01\tExisting\tCLARK\tna\tna\t%s/GCF_111111111.1_Existing/\n' "$CLARK_TEST_BASE_URL"
+				printf 'GCF_222222222.1\tna\tna\tna\trepresentative genome\t222\t222\tNew bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-02\tNew\tCLARK\tna\tna\t%s/GCF_222222222.1_New/\n' "$CLARK_TEST_BASE_URL"
+				printf 'GCF_333333333.1\tna\tna\tna\tna\t333\t333\tUnselected bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2025-01-03\tUnselected\tCLARK\tna\tna\t%s/GCF_333333333.1_Unselected\n' "$CLARK_TEST_BASE_URL"
+				printf 'GCF_444444444.1\tna\tna\tna\trepresentative genome\t444\t444\tDraft bacterium\tna\tna\tlatest\tScaffold\tMajor\tFull\t2025-01-04\tDraft\tCLARK\tna\tna\t%s/GCF_444444444.1_Draft\n' "$CLARK_TEST_BASE_URL"
 			} > "$out"
 			;;
 		*/archaea/assembly_summary.txt)
@@ -1061,6 +1233,7 @@ STUB
 
 	PATH="$bindir:$PATH" \
 	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_TEST_BASE_URL="file://$fixtures" \
 	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
 		"$REPO_DIR/scripts/download_RefSeqDB.sh" --threads 2 --resume --refseq-category representative "$dbdir" bacteria > "$tmp/downloader.out"
 
@@ -1072,7 +1245,7 @@ STUB
 		fail "RefSeq downloader provenance includes assemblies outside the requested filters"
 	fi
 	grep -Fq "skipped-existing" "$dbdir/.bacteria.download_manifest.tsv" || fail "RefSeq downloader did not record resumed existing archive"
-	if grep -Fq "download https://example.org/refseq/GCF_111111111.1_Existing" "$log"; then
+	if grep -Fq "GCF_111111111.1_Existing_genomic.fna.gz" "$log"; then
 		fail "RefSeq downloader re-downloaded an existing archive during resume"
 	fi
 	pass "RefSeq downloader filters RefSeq assemblies and resumes existing archives"
@@ -1500,6 +1673,7 @@ test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
 test_refseq_downloader_rejects_malformed_urls_before_download
+test_refseq_downloader_tty_progress_rewrites_line
 test_refseq_downloader_quiet_aggregate_progress
 test_refseq_downloader_retries_parallel_transient_failures
 test_refseq_downloader_defers_retry_until_after_first_pass

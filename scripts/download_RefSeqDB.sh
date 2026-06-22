@@ -51,6 +51,7 @@ FIRST_PASS_ATTEMPTS=${CLARK_REFSEQ_FIRST_PASS_ATTEMPTS:-3}
 RETRY_DELAY=${CLARK_REFSEQ_RETRY_DELAY:-2}
 REFSEQ_CATEGORY=${CLARK_REFSEQ_CATEGORY:-all}
 ASSEMBLY_LEVEL=${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}
+PYTHON_CMD=${CLARK_PYTHON:-python3}
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -238,80 +239,6 @@ fetch_to_file() {
 	record_manifest "metadata" "$source" "$url" "$output" "downloaded"
 }
 
-valid_gzip_archive() {
-	[ -s "$1" ] || return 1
-	gzip -t "$1" >/dev/null 2>&1
-}
-
-run_sequence_download_once() {
-	url="$1"
-	partial="$2"
-
-	if command -v wget >/dev/null 2>&1; then
-		if [ "$RESUME" = "1" ] && [ -s "$partial" ]; then
-			wget -q -c -O "$partial" "$url"
-		else
-			wget -q -O "$partial" "$url"
-		fi
-	elif command -v curl >/dev/null 2>&1; then
-		if [ "$RESUME" = "1" ] && [ -s "$partial" ]; then
-			curl -fsSL --retry 3 -C - -o "$partial" "$url"
-		else
-			curl -fsSL --retry 3 -o "$partial" "$url"
-		fi
-	else
-		die "neither wget nor curl is available"
-	fi
-}
-
-fetch_url_to_status() {
-	url="$1"
-	source="$2"
-	status_file="$3"
-	max_attempts="$4"
-	failure_status="$5"
-	output=${url##*/}
-
-	if [ -s "$output" ]; then
-		if ! valid_gzip_archive "$output"; then
-			rm -f "$output"
-		else
-			record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "skipped-existing"
-			return 0
-		fi
-	fi
-	if [ "${output%.gz}" != "$output" ] && [ -s "${output%.gz}" ]; then
-		record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/${output%.gz}" "skipped-existing"
-		return 0
-	fi
-
-	partial="$output.part"
-	if [ "$RESUME" != "1" ]; then
-		rm -f "$partial"
-	fi
-
-	attempt=1
-	while [ "$attempt" -le "$max_attempts" ]; do
-		if run_sequence_download_once "$url" "$partial"; then
-			:
-		fi
-		if valid_gzip_archive "$partial"; then
-			mv "$partial" "$output"
-			record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "downloaded"
-			return 0
-		fi
-		rm -f "$partial"
-		if [ "$attempt" -lt "$max_attempts" ] && [ "$RETRY_DELAY" -gt 0 ]; then
-			sleep $((RETRY_DELAY * attempt))
-		fi
-		attempt=$((attempt + 1))
-	done
-
-	rm -f "$partial"
-	record_manifest_line "$status_file" "download" "$source" "$url" "$(pwd)/$output" "$failure_status"
-	return 0
-}
-
 download_assembly_source() {
 	source="$1"
 	summary_url="https://ftp.ncbi.nlm.nih.gov/genomes/refseq/$source/assembly_summary.txt"
@@ -338,6 +265,7 @@ download_assembly_source() {
 					next
 				}
 				ftp_path = $20
+				sub(/^ftp:\/\/ftp\.ncbi\.nlm\.nih\.gov/, "https://ftp.ncbi.nlm.nih.gov", ftp_path)
 				sub(/\/+$/, "", ftp_path)
 				n = split(ftp_path, path_parts, "/")
 				if (ftp_path == "" || path_parts[n] == "") {
@@ -414,92 +342,6 @@ validate_download_list() {
 	' "$DOWNLOAD_LIST" || die "generated malformed RefSeq download URL(s); aborting before download"
 }
 
-report_download_progress() {
-	label="$1"
-	completed="$2"
-	total="$3"
-	if [ "$total" -eq 0 ]; then
-		message="$label: 0/0 files complete (100%)."
-		if [ -t 1 ]; then printf '\r%s\n' "$message"; else echo "$message"; fi
-		return 0
-	fi
-	percent=$((completed * 100 / total))
-	message="$label: $completed/$total files complete ($percent%)."
-	if [ -t 1 ]; then
-		if [ "$completed" -ge "$total" ]; then
-			printf '\r%s\n' "$message"
-		else
-			printf '\r%s' "$message"
-		fi
-	else
-		echo "$message"
-	fi
-}
-
-run_download_pass() {
-	list_file="$1"
-	status_prefix="$2"
-	max_attempts="$3"
-	failure_status="$4"
-	progress_label="$5"
-	total=$(wc -l < "$list_file" | tr -d ' ')
-
-	[ "$total" -gt 0 ] || return 0
-
-	job_count=0
-	job_index=0
-	completed=0
-	progress_step=$((total / 100))
-	[ "$progress_step" -gt 0 ] || progress_step=1
-	[ "$progress_step" -le 100 ] || progress_step=100
-	next_report="$progress_step"
-	report_download_progress "$progress_label" 0 "$total"
-	while IFS='	' read -r source genome_url || [ -n "$genome_url" ]; do
-		[ -n "$genome_url" ] || continue
-		job_index=$((job_index + 1))
-		fetch_url_to_status "$genome_url" "$source" "$status_dir/$status_prefix.$job_index.status.tsv" "$max_attempts" "$failure_status" &
-		job_count=$((job_count + 1))
-		if [ "$job_count" -ge "$THREADS" ]; then
-			wait
-			completed=$((completed + job_count))
-			if [ -t 1 ] || [ "$completed" -ge "$next_report" ] || [ "$completed" -ge "$total" ]; then
-				report_download_progress "$progress_label" "$completed" "$total"
-				while [ "$next_report" -le "$completed" ]; do
-					next_report=$((next_report + progress_step))
-				done
-			fi
-			job_count=0
-		fi
-	done < "$list_file"
-	if [ "$job_count" -gt 0 ]; then
-		wait
-		completed=$((completed + job_count))
-		report_download_progress "$progress_label" "$completed" "$total"
-	fi
-}
-
-collect_deferred_downloads() {
-	find "$status_dir" -type f -name 'initial.*.status.tsv' -exec awk -F '\t' '
-		$7 == "deferred" { print $4 "\t" $5 }
-	' {} + > "$retry_list"
-}
-
-report_remaining_failures() {
-	find "$status_dir" -type f -name '*.status.tsv' -exec awk -F '\t' '
-		$7 == "failed" { print $4 "\t" $5 }
-	' {} + > "$failed_list"
-	[ -s "$failed_list" ] || return 0
-
-	failed_count=$(wc -l < "$failed_list" | tr -d ' ')
-	echo "Failed to download $failed_count RefSeq genome file(s) after deferred retries." >&2
-	echo "First failed URLs:" >&2
-	sed -n '1,20p' "$failed_list" | while IFS='	' read -r failed_source failed_url || [ -n "$failed_url" ]; do
-		[ -n "$failed_url" ] || continue
-		echo "  [$failed_source] $failed_url" >&2
-	done
-	die "RefSeq download incomplete; rerun the same command to resume and retry failed files"
-}
-
 download_url_list() {
 	validate_download_list
 	total=$(wc -l < "$DOWNLOAD_LIST" | tr -d ' ')
@@ -513,25 +355,22 @@ download_url_list() {
 		return 0
 	fi
 
-	status_dir="$DBDR/.$DB.download-status.$$"
-	rm -rf "$status_dir"
-	mkdir -p "$status_dir"
-	retry_list="$status_dir/deferred.urls.tsv"
-	failed_list="$status_dir/failed.urls.tsv"
-
-	run_download_pass "$DOWNLOAD_LIST" initial "$FIRST_PASS_ATTEMPTS" deferred "RefSeq download progress"
-	collect_deferred_downloads
-	if [ -s "$retry_list" ]; then
-		deferred_count=$(wc -l < "$retry_list" | tr -d ' ')
-		echo "Retrying $deferred_count deferred RefSeq download(s) after the first pass."
-		run_download_pass "$retry_list" retry "$DOWNLOAD_ATTEMPTS" failed "RefSeq deferred retry progress"
-	fi
-
-	if [ -n "$(find "$status_dir" -type f -print -quit)" ]; then
-		find "$status_dir" -type f -name '*.status.tsv' -exec cat {} + >> "$MANIFEST"
-	fi
-	report_remaining_failures
-	rm -rf "$status_dir"
+	command -v "$PYTHON_CMD" >/dev/null 2>&1 || die "Python 3 is required for RefSeq downloads"
+	rm -f "$DBDR/.$DB.download_state.jsonl" "$DBDR/.$DB.download.log" "$DBDR/.$DB.failed_downloads.tsv"
+	"$PYTHON_CMD" "$DIR/scripts/refseq_downloader.py" \
+		--download-list "$DOWNLOAD_LIST" \
+		--manifest "$MANIFEST" \
+		--database "$DB" \
+		--data-dir "$DATA_DIR" \
+		--timestamp "$RUN_STARTED_UTC" \
+		--state "$DBDR/.$DB.download_state.jsonl" \
+		--log "$DBDR/.$DB.download.log" \
+		--failed-list "$DBDR/.$DB.failed_downloads.tsv" \
+		--threads "$THREADS" \
+		--resume "$RESUME" \
+		--attempts "$DOWNLOAD_ATTEMPTS" \
+		--first-pass-attempts "$FIRST_PASS_ATTEMPTS" \
+		--retry-delay "$RETRY_DELAY"
 }
 
 if [ "$DRY_RUN" != "1" ] && [ -s "$MARKER" ]; then
