@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 COVERAGE_DIR="$REPO_DIR/build/coverage"
 GCOV_OUT="$COVERAGE_DIR/gcov.out"
-MIN_COVERAGE="${COVERAGE_MIN:-10}"
+MIN_COVERAGE="${COVERAGE_MIN:-20}"
 
 if [ -z "${COVERAGE_CXXFLAGS+x}" ]; then
 	COVERAGE_CXXFLAGS="-O0 -g --coverage"

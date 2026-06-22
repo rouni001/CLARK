@@ -19,7 +19,7 @@ make coverage
 
 ## Current Coverage
 
-The suite currently contains 26 regression tests. It verifies:
+The suite currently contains 43 regression tests. It verifies:
 
 - all required executables are created by the build
 - `CLARK`, `CLARK-l`, and `CLARK-S` respond to `--version`
@@ -32,9 +32,15 @@ The suite currently contains 26 regression tests. It verifies:
 - conflicting `--light` and `--spaced` options are rejected
 - direct `scripts/` entrypoints resolve the repository root correctly
 - `scripts/set_targets.sh` records absolute database paths when run from another working directory
+- `scripts/set_targets.sh` forwards RefSeq download options and defaults to parallel resumable downloads
 - `scripts/updateTaxonomy.sh` reports missing database configuration clearly
 - `scripts/download_RefSeqDB.sh --dry-run` writes RefSeq manifest and provenance files
 - `scripts/download_RefSeqDB.sh` can process a mocked NCBI assembly summary without live network access
+- `scripts/download_RefSeqDB.sh` normalizes NCBI assembly-summary paths to HTTPS sequence URLs
+- `scripts/download_RefSeqDB.sh` keeps network output quiet while reporting aggregate progress
+- `scripts/download_RefSeqDB.sh` retries transient and deferred failures, then reports remaining failures clearly
+- `scripts/download_RefSeqDB.sh` completes mocked viruses, plasmid, plastid, and protozoa downloads
+- RefSeq provenance taxids are used when metadata is generated from downloaded assemblies
 - README command examples use `scripts/` without stale root-relative script paths
 - `getTargetsDef` emits expected target definitions for a tiny synthetic input
 - `getAccssnTaxID` maps accession IDs and handles unmapped FASTA records
@@ -61,10 +67,10 @@ below the required minimum.
 
 Current coverage from `make coverage`:
 
-- covered executable C++ lines: 915
-- total executable C++ lines: 5,611
-- line coverage: 16.31%
-- required minimum: 10.00%
+- covered executable C++ lines: 1,277
+- total executable C++ lines: 5,642
+- line coverage: 22.63%
+- required minimum: 20.00%
 
 ## Coverage Limitations
 

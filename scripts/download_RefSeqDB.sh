@@ -265,6 +265,7 @@ download_assembly_source() {
 					next
 				}
 				ftp_path = $20
+				sub(/^ftp:\/\/ftp\.ncbi\.nlm\.nih\.gov/, "https://ftp.ncbi.nlm.nih.gov", ftp_path)
 				sub(/\/+$/, "", ftp_path)
 				n = split(ftp_path, path_parts, "/")
 				if (ftp_path == "" || path_parts[n] == "") {

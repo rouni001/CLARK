@@ -635,7 +635,7 @@ if [ "$1" = "-O" ]; then
 			{
 				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
 				printf 'GCF_055383595.1\tna\tna\tna\tna\t111\t111\tMock bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tASM5538359v1\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/\n'
-				printf 'GCF_900128725.1\tna\tna\tna\tna\t222\t222\tMock bacterium 2\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tBCifornacula_v1.0\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/\n'
+				printf 'GCF_900128725.1\tna\tna\tna\tna\t222\t222\tMock bacterium 2\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tBCifornacula_v1.0\tNCBI\tna\tna\tftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/\n'
 			} > "$out"
 			;;
 		*/archaea/assembly_summary.txt)
@@ -661,6 +661,11 @@ STUB
 	grep -Fq "Selected 2 bacteria RefSeq genome(s)" "$tmp/downloader.out" || fail "RefSeq downloader did not select the NCBI-shaped fixture rows"
 	grep -Fq "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/GCF_055383595.1_ASM5538359v1_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
 		fail "RefSeq downloader did not normalize the real NCBI trailing-slash ftp_path shape"
+	grep -Fq "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/900/128/725/GCF_900128725.1_BCifornacula_v1.0/GCF_900128725.1_BCifornacula_v1.0_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
+		fail "RefSeq downloader did not normalize NCBI assembly_summary FTP paths to HTTPS"
+	if grep -Fq "ftp://ftp.ncbi.nlm.nih.gov" "$dbdir/.bacteria.download_manifest.tsv"; then
+		fail "RefSeq downloader left an NCBI FTP URL in the generated manifest"
+	fi
 	if grep -Fq "//_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv"; then
 		fail "RefSeq downloader emitted the broken double-slash empty-basename URL"
 	fi
