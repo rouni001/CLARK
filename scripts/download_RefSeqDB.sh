@@ -264,6 +264,14 @@ download_assembly_source() {
 
 	fetch_to_file "$summary_url" "$summary_file" "$source"
 
+	first_line=$(head -n 1 "$summary_file")
+	case "$first_line" in
+		'#'*) ;;
+		*)
+			die "unexpected content while downloading $summary_url (expected an NCBI assembly_summary.txt starting with '#', got something else). A network intermediary (proxy/firewall) may have intercepted or altered the response. The unexpected file was kept at $summary_file for inspection."
+			;;
+	esac
+
 	awk -F '\t' \
 		-v db="$DB" \
 		-v source="$source" \
