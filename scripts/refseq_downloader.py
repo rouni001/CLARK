@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import random
 import shutil
+import ssl
 import sys
 import time
 import urllib.error
@@ -37,7 +38,21 @@ def parse_args():
     parser.add_argument("--attempts", type=int, default=5)
     parser.add_argument("--first-pass-attempts", type=int, default=3)
     parser.add_argument("--retry-delay", type=int, default=2)
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable TLS certificate verification for genome downloads (insecure).",
+    )
     return parser.parse_args()
+
+
+def build_ssl_context(insecure):
+    if not insecure:
+        return None
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
 
 
 def setup_logging(path):
@@ -127,7 +142,7 @@ def append_jsonl(path, records):
             handle.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def download_once(url, partial_path, resume):
+def download_once(url, partial_path, resume, ssl_context=None):
     headers = {"User-Agent": USER_AGENT}
     mode = "wb"
     existing_size = partial_path.stat().st_size if partial_path.exists() else 0
@@ -138,7 +153,7 @@ def download_once(url, partial_path, resume):
         mode = "ab"
 
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=120) as response:
+    with urllib.request.urlopen(request, timeout=120, context=ssl_context) as response:
         status = getattr(response, "status", None)
         if mode == "ab" and status != 206:
             mode = "wb"
@@ -146,7 +161,7 @@ def download_once(url, partial_path, resume):
             shutil.copyfileobj(response, output, length=1024 * 1024)
 
 
-def fetch_entry(entry, data_dir, max_attempts, failure_status, retry_delay, resume):
+def fetch_entry(entry, data_dir, max_attempts, failure_status, retry_delay, resume, ssl_context=None):
     url = entry["url"]
     source = entry["source"]
     output = data_dir / filename_from_url(url)
@@ -169,7 +184,7 @@ def fetch_entry(entry, data_dir, max_attempts, failure_status, retry_delay, resu
     last_error = ""
     for attempt in range(1, max_attempts + 1):
         try:
-            download_once(url, partial, resume)
+            download_once(url, partial, resume, ssl_context)
             if gzip_is_valid(partial) and checksum_is_valid(partial, entry["checksum"]):
                 partial.replace(output)
                 row = manifest_row("", "", "download", source, url, str(output), "downloaded")
@@ -203,7 +218,7 @@ def print_progress(label, completed, total):
         print(message, flush=True)
 
 
-def run_pass(entries, label, threads, max_attempts, failure_status, retry_delay, resume, data_dir):
+def run_pass(entries, label, threads, max_attempts, failure_status, retry_delay, resume, data_dir, ssl_context=None):
     if not entries:
         return []
 
@@ -216,7 +231,7 @@ def run_pass(entries, label, threads, max_attempts, failure_status, retry_delay,
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as pool:
         futures = [
-            pool.submit(fetch_entry, entry, data_dir, max_attempts, failure_status, retry_delay, resume)
+            pool.submit(fetch_entry, entry, data_dir, max_attempts, failure_status, retry_delay, resume, ssl_context)
             for entry in entries
         ]
         for future in concurrent.futures.as_completed(futures):
@@ -270,6 +285,11 @@ def main():
     entries = read_download_list(args.download_list)
     threads = min(args.threads, max(1, len(entries)))
 
+    ssl_context = build_ssl_context(args.insecure)
+    if args.insecure:
+        logging.warning("TLS certificate verification is disabled for this download run.")
+        print("Warning: TLS certificate verification is disabled (--insecure).", file=sys.stderr)
+
     logging.info("Starting RefSeq download: database=%s files=%d threads=%d", args.database, len(entries), threads)
     first_results = run_pass(
         entries,
@@ -280,6 +300,7 @@ def main():
         args.retry_delay,
         bool(args.resume),
         data_dir,
+        ssl_context,
     )
     deferred = [item["entry"] for item in first_results if item["status"] == "deferred"]
     retry_results = []
@@ -294,6 +315,7 @@ def main():
             args.retry_delay,
             bool(args.resume),
             data_dir,
+            ssl_context,
         )
 
     all_results = first_results + retry_results

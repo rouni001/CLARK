@@ -18,6 +18,7 @@ Download options for RefSeq databases:
   --refseq-category <all|representative|reference>
                                       Select all, representative, or reference RefSeq assemblies.
   --assembly-level <level|all>        Select a RefSeq assembly_level (default: Complete Genome).
+  --insecure-tls                      Disable TLS certificate verification for downloads (insecure).
 USAGE
 }
 
@@ -62,6 +63,7 @@ DOWNLOAD_THREADS="${CLARK_REFSEQ_THREADS:-8}"
 RESUME_DOWNLOADS="${CLARK_REFSEQ_RESUME:-1}"
 REFSEQ_CATEGORY="${CLARK_REFSEQ_CATEGORY:-all}"
 ASSEMBLY_LEVEL="${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}"
+INSECURE_TLS="${CLARK_REFSEQ_INSECURE_TLS:-0}"
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
@@ -87,6 +89,10 @@ while [ "$#" -gt 0 ]; do
 			[ "$#" -ge 2 ] || die "--assembly-level requires a value"
 			ASSEMBLY_LEVEL="$2"
 			shift 2
+			;;
+		--insecure-tls)
+			INSECURE_TLS=1
+			shift
 			;;
 		--*)
 			die "unrecognized option '$1'"
@@ -114,6 +120,7 @@ export CLARK_REFSEQ_THREADS="$DOWNLOAD_THREADS"
 export CLARK_REFSEQ_RESUME="$RESUME_DOWNLOADS"
 export CLARK_REFSEQ_CATEGORY="$REFSEQ_CATEGORY"
 export CLARK_REFSEQ_ASSEMBLY_LEVEL="$ASSEMBLY_LEVEL"
+export CLARK_REFSEQ_INSECURE_TLS="$INSECURE_TLS"
 
 SCRIPT_DIR="$(script_dir)"
 LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"

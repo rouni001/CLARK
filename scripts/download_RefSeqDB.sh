@@ -35,6 +35,7 @@ Options:
   --refseq-category <all|representative|reference>
                                     Filter RefSeq assembly summaries by refseq_category (default: all).
   --assembly-level <level|all>      Filter RefSeq assembly summaries by assembly_level (default: Complete Genome).
+  --insecure-tls                    Disable TLS certificate verification for downloads (insecure).
 USAGE
 }
 
@@ -51,6 +52,7 @@ FIRST_PASS_ATTEMPTS=${CLARK_REFSEQ_FIRST_PASS_ATTEMPTS:-3}
 RETRY_DELAY=${CLARK_REFSEQ_RETRY_DELAY:-2}
 REFSEQ_CATEGORY=${CLARK_REFSEQ_CATEGORY:-all}
 ASSEMBLY_LEVEL=${CLARK_REFSEQ_ASSEMBLY_LEVEL:-Complete Genome}
+INSECURE_TLS=${CLARK_REFSEQ_INSECURE_TLS:-0}
 PYTHON_CMD=${CLARK_PYTHON:-python3}
 
 while [ "$#" -gt 0 ]; do
@@ -77,6 +79,10 @@ while [ "$#" -gt 0 ]; do
 			[ "$#" -ge 2 ] || die "--assembly-level requires a value"
 			ASSEMBLY_LEVEL="$2"
 			shift 2
+			;;
+		--insecure-tls)
+			INSECURE_TLS=1
+			shift
 			;;
 		--*)
 			die "unrecognized option: $1"
@@ -114,6 +120,11 @@ esac
 case "$REFSEQ_CATEGORY" in
 	all|representative|reference) ;;
 	*) die "--refseq-category must be all, representative, or reference" ;;
+esac
+
+case "$INSECURE_TLS" in
+	0|1) ;;
+	*) die "CLARK_REFSEQ_INSECURE_TLS must be 0 or 1" ;;
 esac
 
 DIR=${CLARK_HOME:-$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)}
@@ -223,12 +234,19 @@ fetch_to_file() {
 	output="$2"
 	source="$3"
 
+	wget_tls_opt=""
+	curl_tls_opt=""
+	if [ "$INSECURE_TLS" = "1" ]; then
+		wget_tls_opt="--no-check-certificate"
+		curl_tls_opt="-k"
+	fi
+
 	if command -v wget >/dev/null 2>&1; then
-		if ! wget -q -O "$output" "$url"; then
+		if ! wget -q $wget_tls_opt -O "$output" "$url"; then
 			die "failed to download $url"
 		fi
 	elif command -v curl >/dev/null 2>&1; then
-		if ! curl -fsSL --retry 3 -o "$output" "$url"; then
+		if ! curl -fsSL $curl_tls_opt --retry 3 -o "$output" "$url"; then
 			die "failed to download $url"
 		fi
 	else
@@ -357,6 +375,11 @@ download_url_list() {
 
 	command -v "$PYTHON_CMD" >/dev/null 2>&1 || die "Python 3 is required for RefSeq downloads"
 	rm -f "$DBDR/.$DB.download_state.jsonl" "$DBDR/.$DB.download.log" "$DBDR/.$DB.failed_downloads.tsv"
+	insecure_opt=""
+	if [ "$INSECURE_TLS" = "1" ]; then
+		echo "Warning: TLS certificate verification is disabled for RefSeq downloads (--insecure-tls)."
+		insecure_opt="--insecure"
+	fi
 	"$PYTHON_CMD" "$DIR/scripts/refseq_downloader.py" \
 		--download-list "$DOWNLOAD_LIST" \
 		--manifest "$MANIFEST" \
@@ -370,7 +393,8 @@ download_url_list() {
 		--resume "$RESUME" \
 		--attempts "$DOWNLOAD_ATTEMPTS" \
 		--first-pass-attempts "$FIRST_PASS_ATTEMPTS" \
-		--retry-delay "$RETRY_DELAY"
+		--retry-delay "$RETRY_DELAY" \
+		$insecure_opt
 }
 
 if [ "$DRY_RUN" != "1" ] && [ -s "$MARKER" ]; then
