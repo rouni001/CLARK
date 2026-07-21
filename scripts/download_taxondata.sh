@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: $0 [--skip-accession-maps] <Directory: directory to store taxonomy data>"
+	echo "Usage: $0 [--skip-accession-maps] [--insecure-tls] <Directory: directory to store taxonomy data>"
 }
 
 die() {
@@ -14,21 +14,49 @@ die() {
 download_file() {
 	local url="$1"
 	local dest="$2"
+	local curl_tls_opt=()
+	local wget_tls_opt=()
+
+	if [ "$INSECURE_TLS" = "1" ]; then
+		curl_tls_opt=(-k)
+		wget_tls_opt=(--no-check-certificate)
+	fi
 
 	if command -v curl >/dev/null 2>&1; then
-		curl -L --fail --retry 3 --output "$dest" "$url"
+		curl -L --fail --retry 3 "${curl_tls_opt[@]}" --output "$dest" "$url"
 	elif command -v wget >/dev/null 2>&1; then
-		wget -O "$dest" "$url"
+		wget "${wget_tls_opt[@]}" -O "$dest" "$url"
 	else
 		die "curl or wget is required to download taxonomy data"
 	fi
 }
 
 SKIP_ACCESSION_MAPS=0
-if [ "${1:-}" = "--skip-accession-maps" ]; then
-	SKIP_ACCESSION_MAPS=1
-	shift
-fi
+INSECURE_TLS="${CLARK_REFSEQ_INSECURE_TLS:-0}"
+
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--skip-accession-maps)
+			SKIP_ACCESSION_MAPS=1
+			shift
+			;;
+		--insecure-tls)
+			INSECURE_TLS=1
+			shift
+			;;
+		--*)
+			die "unrecognized option: $1"
+			;;
+		*)
+			break
+			;;
+	esac
+done
+
+case "$INSECURE_TLS" in
+	0|1) ;;
+	*) die "CLARK_REFSEQ_INSECURE_TLS must be 0 or 1" ;;
+esac
 
 if [ "$#" -ne 1 ]; then
 	usage
@@ -45,6 +73,9 @@ esac
 mkdir -p "$TARGET_DIR"
 cd "$TARGET_DIR"
 
+if [ "$INSECURE_TLS" = "1" ]; then
+	echo "Warning: TLS certificate verification is disabled for taxonomy downloads (--insecure-tls)."
+fi
 echo "Downloading NCBI taxonomy data..."
 if [ "$SKIP_ACCESSION_MAPS" != "1" ]; then
 	download_file "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/accession2taxid/nucl_gb.accession2taxid.gz" "nucl_gb.accession2taxid.gz"

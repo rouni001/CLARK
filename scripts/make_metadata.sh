@@ -89,7 +89,10 @@ ensure_taxonomy_data() {
 	local require_accession_maps="$1"
 	local downloader_args=()
 	if [ "$require_accession_maps" != "1" ]; then
-		downloader_args=(--skip-accession-maps)
+		downloader_args+=(--skip-accession-maps)
+	fi
+	if [ "${CLARK_REFSEQ_INSECURE_TLS:-0}" = "1" ]; then
+		downloader_args+=(--insecure-tls)
 	fi
 
 	if [ ! -d "$DBDR/$TAXDR" ]; then
