@@ -329,9 +329,13 @@ def main():
     if failures:
         write_failed_list(args.failed_list, failures)
         print("Failed to download %d RefSeq genome file(s) after deferred retries." % len(failures), file=sys.stderr)
+        print("Details (source, URL, last error) written to: %s" % args.failed_list, file=sys.stderr)
         print("First failed URLs:", file=sys.stderr)
         for item in failures[:20]:
-            print("  [%s] %s" % (item["entry"]["source"], item["entry"]["url"]), file=sys.stderr)
+            print(
+                "  [%s] %s -- %s" % (item["entry"]["source"], item["entry"]["url"], item.get("error", "unknown error")),
+                file=sys.stderr,
+            )
         return 1
 
     logging.info("Finished RefSeq download: database=%s files=%d", args.database, len(entries))
