@@ -1,5 +1,7 @@
 /build/
 /exe/
+__pycache__/
+*.pyc
 /.dCLARK/
 /.tmp
 /.settings
