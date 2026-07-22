@@ -1403,6 +1403,45 @@ test_batch_classify_run_all() {
 	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
 }
 
+test_clark_cud_profile_opt_in() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-cud-profile-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	genome="$tmp/refA.fa"
+	{
+		printf '>refA\n'
+		python3 -c "import random; random.seed(3); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome"
+
+	targets="$tmp/targets.txt"
+	printf '%s\t111\n' "$genome" > "$targets"
+
+	dbd="$tmp/dbd/"
+	mkdir -p "$dbd"
+
+	objects="$tmp/objects.fa"
+	python3 -c "
+seq = ''.join(l.strip() for l in open('$genome') if not l.startswith('>'))
+print('>read1')
+print(seq[100:250])
+" > "$objects"
+
+	"$REPO_DIR/exe/CLARK-l" -k 31 -T "$targets" -D "$dbd" -O "$objects" -R "$tmp/results1" -n 1 > "$tmp/out1" 2>&1
+	if grep -Fq "CUD_PROFILE" "$tmp/out1"; then
+		fail "CLARK-l printed CUD_PROFILE without CLARK_CUD_PROFILE=1 being set"
+	fi
+
+	CLARK_CUD_PROFILE=1 "$REPO_DIR/exe/CLARK-l" -k 31 -T "$targets" -D "$dbd" -O "$objects" -R "$tmp/results2" -n 1 > "$tmp/out2" 2>&1
+	line="$(grep "CUD_PROFILE" "$tmp/out2" || true)"
+	[ -n "$line" ] || fail "CLARK-l did not print a CUD_PROFILE line with CLARK_CUD_PROFILE=1"
+
+	# CLARK-l ignores -k and always uses its own light k-mer size (27).
+	printf '%s\n' "$line" | grep -Eq 'build_s=[0-9.e+-]+ load_s=[0-9.e+-]+ match_s=[0-9.e+-]+ write_s=[0-9.e+-]+ kmer=27 nbObjects=1$' \
+		|| fail "CUD_PROFILE line has an unexpected format: $line"
+
+	pass "CLARK_CUD_PROFILE opt-in prints a build/load/match/write breakdown only when requested"
+}
+
 test_get_targets_def_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-targets-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1823,6 +1862,7 @@ test_documentation_script_paths
 test_make_sample_smoke
 test_make_sample_requires_configured_targets
 test_batch_classify_run_all
+test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count
 test_get_accssn_taxid_smoke

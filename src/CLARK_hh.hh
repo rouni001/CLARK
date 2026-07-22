@@ -137,6 +137,11 @@ class CLARK
 		std::vector< std::vector<uint64_t> >	m_powerTable;
 		int	 				m_separators[256];
 
+		// CuD profiling: phase timings, opt-in via CLARK_CUD_PROFILE=1
+		double					m_buildTimeSec;
+		double					m_loadTimeSec;
+		struct timeval				m_matchEndTime;
+
 	public:
 		CLARK(const size_t& 			_kmerLength,
 				const char* 		_filesName,
@@ -255,9 +260,13 @@ class CLARK
 		void printExtendedSFResults(const char*                            _fileResult
 				) const;
 
-		void printSpeedStats(const struct timeval& 			_requestEnd, 
-				const struct timeval& 				_requestStart, 
+		void printSpeedStats(const struct timeval& 			_requestEnd,
+				const struct timeval& 				_requestStart,
 				const char* 					_fileResult
+				) const;
+
+		void printCuDProfile(const struct timeval& 			_requestStart,
+				const struct timeval& 				_requestEnd
 				) const;
 
 		void getdbName(char * 						_dbname,
@@ -389,12 +398,24 @@ CLARK<HKMERr>::CLARK(const size_t& 	_kmerLength,
 	}
 	vector<string> filesHT, filesHTC;
 	size_t sizeMotherHT = 0;
+	m_buildTimeSec = 0.0;
+	m_loadTimeSec = 0.0;
 	if (!getTargetsData(_filesName, filesHT, filesHTC, _creatingkmfiles, _samplingFactor))
 	{
 		cerr << "Starting the creation of the database of targets specific " << m_kmerSize << "-mers from input files..." << endl;
+		struct timeval buildStart, buildEnd;
+		gettimeofday(&buildStart, NULL);
 		sizeMotherHT = makeSpecificTargetSets(filesHT, filesHTC);
+		gettimeofday(&buildEnd, NULL);
+		m_buildTimeSec = (buildEnd.tv_sec - buildStart.tv_sec) + (buildEnd.tv_usec - buildStart.tv_usec) / 1000000.0;
 	}
-	loadSpecificTargetSets(filesHT, filesHTC, sizeMotherHT, _samplingFactor, _mmapLoading);
+	{
+		struct timeval loadStart, loadEnd;
+		gettimeofday(&loadStart, NULL);
+		loadSpecificTargetSets(filesHT, filesHTC, sizeMotherHT, _samplingFactor, _mmapLoading);
+		gettimeofday(&loadEnd, NULL);
+		m_loadTimeSec = (loadEnd.tv_sec - loadStart.tv_sec) + (loadEnd.tv_usec - loadStart.tv_usec) / 1000000.0;
+	}
 
 	for(size_t t = 0; t < m_nbCPU; t++)
 	{
@@ -660,6 +681,7 @@ void CLARK<HKMERr>::runSimple(const char* _fileTofilesname, const char* _fileRes
 		fclose(_fout);
 		// Measurement execution time
 		printSpeedStats(requestEnd,requestStart,fileResult);
+		printCuDProfile(requestStart,requestEnd);
 
 		msync(map, fileSize, MS_SYNC);
 		if (munmap(map, fileSize) == -1)
@@ -678,6 +700,7 @@ void CLARK<HKMERr>::runSimple(const char* _fileTofilesname, const char* _fileRes
 		fclose(_fout);
 		// Measurement execution time
 		printSpeedStats(requestEnd,requestStart,fileResult);
+		printCuDProfile(requestStart,requestEnd);
 
 		msync(map, fileSize, MS_SYNC);
 		if (munmap(map, fileSize) == -1)
@@ -1872,7 +1895,8 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 	{
 		cerr << "Failed to recognize the format of the file." << endl; exit(-1) ;
 	}
-	fprintf(_fout, "Object_ID, Length, Assignment\n");	
+	gettimeofday(&m_matchEndTime, NULL);
+	fprintf(_fout, "Object_ID, Length, Assignment\n");
 	size_t i = 0, c = 0;
 	for(i_r = 0; i_r < m_nbCPU; i_r++)
 	{
@@ -2150,6 +2174,7 @@ void CLARK<HKMERr>::getObjectsDataComputeFastLight(const uint8_t * _map, const s
 	{
 		cerr << "Failed to recognize the format of the file." << endl; exit(-1) ;
 	}
+	gettimeofday(&m_matchEndTime, NULL);
 	fprintf(_fout, "Object_ID, Length, Assignment\n");
 	size_t i = 0, c = 0;
 	for(i_r = 0; i_r < m_nbCPU; i_r++)
@@ -2890,6 +2915,24 @@ void CLARK<HKMERr>::printSpeedStats(const struct timeval& _requestEnd, const str
 	cout <<" - Assignment time: "<<diff<<" s. Speed: ";
 	cout << (size_t) (((double) m_nbObjects)/(diff)*60.0)<<" objects/min. ("<< m_nbObjects<<" objects)."<<endl;
 	cout <<" - Results stored in " << _fileResult << endl;
+}
+
+template <typename HKMERr>
+void CLARK<HKMERr>::printCuDProfile(const struct timeval& _requestStart, const struct timeval& _requestEnd) const
+{
+	if (getenv("CLARK_CUD_PROFILE") == NULL)
+	{
+		return;
+	}
+	double matchDiff = (m_matchEndTime.tv_sec - _requestStart.tv_sec) + (m_matchEndTime.tv_usec - _requestStart.tv_usec) / 1000000.0;
+	double writeDiff = (_requestEnd.tv_sec - m_matchEndTime.tv_sec) + (_requestEnd.tv_usec - m_matchEndTime.tv_usec) / 1000000.0;
+	cout << "CUD_PROFILE build_s=" << m_buildTimeSec
+		<< " load_s=" << m_loadTimeSec
+		<< " match_s=" << matchDiff
+		<< " write_s=" << writeDiff
+		<< " kmer=" << m_kmerSize
+		<< " nbObjects=" << m_nbObjects
+		<< endl;
 }
 
 template <typename HKMERr>
