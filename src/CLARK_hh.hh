@@ -67,6 +67,29 @@ static std::string clarkJoinPath(const std::string& folder, const std::string& n
 	return folder + "/" + name;
 }
 
+// CuD fine profiling: RDTSC (x86) reads the CPU's time-stamp counter
+// directly (no syscall), giving a much lower-overhead per-call timer
+// than clock_gettime/gettimeofday. Falls back to clock_gettime on
+// non-x86 targets (Apple Silicon, ARM), where the accumulated value is
+// nanoseconds rather than cycles.
+#if defined(__x86_64__) || defined(__i386__)
+#include <x86intrin.h>
+#define CUD_HAVE_RDTSC 1
+#else
+#define CUD_HAVE_RDTSC 0
+#endif
+
+static inline uint64_t cudRdtsc()
+{
+#if CUD_HAVE_RDTSC
+	return __rdtsc();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+#endif
+}
+
 template <typename HKMERr>
 class CLARK
 {
@@ -141,6 +164,18 @@ class CLARK
 		double					m_buildTimeSec;
 		double					m_loadTimeSec;
 		struct timeval				m_matchEndTime;
+
+		// CuD fine profiling: per-thread RDTSC cycle/call accumulators for
+		// k-mer matching, hits update, and classification, opt-in via
+		// CLARK_CUD_PROFILE_FINE=1 (adds per-k-mer timer overhead, unlike
+		// the phase timings above).
+		bool					m_fineProfile;
+		std::vector<uint64_t>			m_matchCycles;
+		std::vector<uint64_t>			m_hitsCycles;
+		std::vector<uint64_t>			m_classifyCycles;
+		std::vector<uint64_t>			m_matchCalls;
+		std::vector<uint64_t>			m_hitsCalls;
+		std::vector<uint64_t>			m_classifyCalls;
 
 	public:
 		CLARK(const size_t& 			_kmerLength,
@@ -268,6 +303,8 @@ class CLARK
 		void printCuDProfile(const struct timeval& 			_requestStart,
 				const struct timeval& 				_requestEnd
 				) const;
+
+		void printCuDProfileFine() const;
 
 		// CuD profiling: split out of the hot loop as separate (non-inlined)
 		// symbols so `perf report`/`perf annotate` can attribute samples to
@@ -441,6 +478,14 @@ CLARK<HKMERr>::CLARK(const size_t& 	_kmerLength,
 		m_ITables[t].resize(m_labels.size() + m_labels_c.size());
 		m_Indexes[t].resize(m_labels.size() + m_labels_c.size());
 	}
+
+	m_fineProfile = getenv("CLARK_CUD_PROFILE_FINE") != NULL;
+	m_matchCycles.assign(m_nbCPU, 0);
+	m_hitsCycles.assign(m_nbCPU, 0);
+	m_classifyCycles.assign(m_nbCPU, 0);
+	m_matchCalls.assign(m_nbCPU, 0);
+	m_hitsCalls.assign(m_nbCPU, 0);
+	m_classifyCalls.assign(m_nbCPU, 0);
 }
 
 	template <typename HKMERr>
@@ -719,6 +764,7 @@ void CLARK<HKMERr>::runSimple(const char* _fileTofilesname, const char* _fileRes
 		// Measurement execution time
 		printSpeedStats(requestEnd,requestStart,fileResult);
 		printCuDProfile(requestStart,requestEnd);
+		printCuDProfileFine();
 
 		msync(map, fileSize, MS_SYNC);
 		if (munmap(map, fileSize) == -1)
@@ -1569,6 +1615,7 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 		{
 			// Variables
 			uint64_t _km_f =0, _km_r = 0;
+			uint64_t cudT0 = 0, cudT1 = 0, cudT2 = 0, cudT3 = 0;
 			bool _isfull = false;
 			ILBL h, opt_h = 0, p = 0;
 			ITYPE s_best = 0, token = 1;
@@ -1617,14 +1664,39 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 							_km_f ^= m_pTable[m_table[_map[i_c]]];
 
 							// Query to HashTable (Thread-safe)
+							if (m_fineProfile) { cudT0 = cudRdtsc(); }
 							if (m_centralHt->queryElement(_km_f, h))
 							{
+								if (m_fineProfile)
+								{
+									cudT1 = cudRdtsc();
+									m_matchCycles[i_r] += cudT1 - cudT0;
+									m_matchCalls[i_r]++;
+								}
 								updateHits(resultTargets, iTable, idx, iSize, h, token);
+								if (m_fineProfile)
+								{
+									cudT2 = cudRdtsc();
+									m_hitsCycles[i_r] += cudT2 - cudT1;
+									m_hitsCalls[i_r]++;
+								}
 								classifyBest(resultTargets[h], h, opt_h, s_best);
+								if (m_fineProfile)
+								{
+									cudT3 = cudRdtsc();
+									m_classifyCycles[i_r] += cudT3 - cudT2;
+									m_classifyCalls[i_r]++;
+								}
 								if (resultTargets[h] > capacity)
 								{       break;  }
 								i_c++;
 								continue;
+							}
+							if (m_fineProfile)
+							{
+								cudT1 = cudRdtsc();
+								m_matchCycles[i_r] += cudT1 - cudT0;
+								m_matchCalls[i_r]++;
 							}
 							capacity--;
 							i_c++;
@@ -1636,10 +1708,29 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 						{
 							_isfull = true;
 							// Query to HashTable (Thread-safe)
+							if (m_fineProfile) { cudT0 = cudRdtsc(); }
 							if (m_centralHt->queryElement(_km_r, h))
 							{
+								if (m_fineProfile)
+								{
+									cudT1 = cudRdtsc();
+									m_matchCycles[i_r] += cudT1 - cudT0;
+									m_matchCalls[i_r]++;
+								}
 								updateHits(resultTargets, iTable, idx, iSize, h, token);
+								if (m_fineProfile)
+								{
+									cudT2 = cudRdtsc();
+									m_hitsCycles[i_r] += cudT2 - cudT1;
+									m_hitsCalls[i_r]++;
+								}
 								classifyBest(resultTargets[h], h, opt_h, s_best);
+								if (m_fineProfile)
+								{
+									cudT3 = cudRdtsc();
+									m_classifyCycles[i_r] += cudT3 - cudT2;
+									m_classifyCalls[i_r]++;
+								}
 								if (resultTargets[h] > capacity)
 								{       break;  }
 								i_c++;
@@ -1653,6 +1744,12 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 								_km_f = (((uint64_t)-1) - _km_f) >> (64 - (m_k << 1));
 
 								continue;
+							}
+							if (m_fineProfile)
+							{
+								cudT1 = cudRdtsc();
+								m_matchCycles[i_r] += cudT1 - cudT0;
+								m_matchCalls[i_r]++;
 							}
 							capacity--;
 							i_c++;
@@ -2936,6 +3033,35 @@ void CLARK<HKMERr>::printCuDProfile(const struct timeval& _requestStart, const s
 		<< " write_s=" << writeDiff
 		<< " kmer=" << m_kmerSize
 		<< " nbObjects=" << m_nbObjects
+		<< endl;
+}
+
+template <typename HKMERr>
+void CLARK<HKMERr>::printCuDProfileFine() const
+{
+	if (!m_fineProfile)
+	{
+		return;
+	}
+	uint64_t matchCycles = 0, hitsCycles = 0, classifyCycles = 0;
+	uint64_t matchCalls = 0, hitsCalls = 0, classifyCalls = 0;
+	for (size_t t = 0; t < m_nbCPU; t++)
+	{
+		matchCycles += m_matchCycles[t];
+		hitsCycles += m_hitsCycles[t];
+		classifyCycles += m_classifyCycles[t];
+		matchCalls += m_matchCalls[t];
+		hitsCalls += m_hitsCalls[t];
+		classifyCalls += m_classifyCalls[t];
+	}
+	cout << "CUD_PROFILE_FINE"
+		<< (CUD_HAVE_RDTSC ? " unit=cycles" : " unit=nanoseconds")
+		<< " match=" << matchCycles
+		<< " hits=" << hitsCycles
+		<< " classify=" << classifyCycles
+		<< " match_calls=" << matchCalls
+		<< " hits_calls=" << hitsCalls
+		<< " classify_calls=" << classifyCalls
 		<< endl;
 }
 
