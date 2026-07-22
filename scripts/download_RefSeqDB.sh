@@ -291,6 +291,9 @@ download_assembly_source() {
 					next
 				}
 				ftp_path = $20
+				if (ftp_path !~ /^(https?|ftp|file):\/\//) {
+					next
+				}
 				sub(/^ftp:\/\/ftp\.ncbi\.nlm\.nih\.gov/, "https://ftp.ncbi.nlm.nih.gov", ftp_path)
 				sub(/\/+$/, "", ftp_path)
 				n = split(ftp_path, path_parts, "/")
@@ -354,6 +357,10 @@ validate_download_list() {
 		}
 		{
 			url = $2
+			if (url !~ /^(https?|ftp|file):\/\//) {
+				print "Malformed RefSeq download URL (missing http(s):// or ftp:// scheme): " url > "/dev/stderr"
+				exit 1
+			}
 			file_name = url
 			sub(/^.*\//, "", file_name)
 			if (file_name == "" || file_name == "_genomic.fna.gz" || file_name == ".genomic.fna.gz") {

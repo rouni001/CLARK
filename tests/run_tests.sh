@@ -672,6 +672,63 @@ STUB
 	pass "RefSeq downloader normalizes NCBI trailing-slash assembly_summary paths"
 }
 
+test_refseq_downloader_skips_non_url_ftp_path_rows() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-non-url-ftp-path-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	dbdir="$tmp/db"
+	bindir="$tmp/bin"
+	log="$tmp/wget.log"
+	mkdir -p "$bindir"
+
+	cat > "$bindir/wget" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+while [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ] || [ "${1:-}" = "-c" ]; do
+	shift
+done
+if [ "$1" = "-O" ]; then
+	out="$2"
+	url="$3"
+	printf '%s\n' "$url" >> "$CLARK_TEST_WGET_LOG"
+	case "$url" in
+		*/bacteria/assembly_summary.txt)
+			{
+				printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n'
+				printf 'GCF_055383595.1\tna\tna\tna\tna\t111\t111\tMock bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tASM5538359v1\tNCBI\tna\tna\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/055/383/595/GCF_055383595.1_ASM5538359v1/\n'
+				printf 'GCF_999999999.1\tna\tna\tna\tna\t333\t333\tMalformed-row bacterium\tna\tna\tlatest\tComplete Genome\tMajor\tFull\t2026-06-01\tASM999v1\tNCBI\tna\tna\tidentical\n'
+			} > "$out"
+			;;
+		*/archaea/assembly_summary.txt)
+			printf '# assembly_accession\tbioproject\tbiosample\twgs_master\trefseq_category\ttaxid\tspecies_taxid\torganism_name\tinfraspecific_name\tisolate\tversion_status\tassembly_level\trelease_type\tgenome_rep\tseq_rel_date\tasm_name\tsubmitter\tgbrs_paired_asm\tpaired_asm_comp\tftp_path\n' > "$out"
+			;;
+		*)
+			echo "unexpected wget -O URL: $url" >&2
+			exit 1
+			;;
+	esac
+else
+	echo "unexpected sequence download during dry-run: $*" >&2
+	exit 1
+fi
+STUB
+	chmod +x "$bindir/wget"
+
+	PATH="$bindir:$PATH" \
+	CLARK_TEST_WGET_LOG="$log" \
+	CLARK_REFSEQ_STATIC_URLS="$tmp/missing-static-urls.tsv" \
+		"$REPO_DIR/scripts/download_RefSeqDB.sh" --dry-run "$dbdir" bacteria > "$tmp/downloader.out"
+
+	grep -Fq "Selected 1 bacteria RefSeq genome(s)" "$tmp/downloader.out" ||
+		fail "RefSeq downloader did not skip the row with a non-URL ftp_path"
+	grep -Fq "GCF_055383595.1_ASM5538359v1_genomic.fna.gz" "$dbdir/.bacteria.download_manifest.tsv" ||
+		fail "RefSeq downloader lost the valid row alongside the malformed one"
+	if grep -Fq "identical" "$dbdir/.bacteria.download_manifest.tsv" "$dbdir/.bacteria.provenance.tsv"; then
+		fail "RefSeq downloader generated a URL from a non-URL ftp_path value"
+	fi
+	pass "RefSeq downloader skips assembly_summary rows whose ftp_path is not a real URL"
+}
+
 test_refseq_downloader_rejects_malformed_urls_before_download() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-refseq-malformed-url-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1848,6 +1905,7 @@ test_set_targets_defaults_to_parallel_resume_downloads
 test_update_taxonomy_requires_db_directory
 test_refseq_downloader_dry_run_manifest
 test_refseq_downloader_normalizes_ncbi_trailing_slash_paths
+test_refseq_downloader_skips_non_url_ftp_path_rows
 test_refseq_downloader_rejects_malformed_urls_before_download
 test_refseq_downloader_tty_progress_rewrites_line
 test_refseq_downloader_quiet_aggregate_progress
