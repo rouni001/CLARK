@@ -1436,7 +1436,7 @@ print(seq[100:250])
 	[ -n "$line" ] || fail "CLARK-l did not print a CUD_PROFILE line with CLARK_CUD_PROFILE=1"
 
 	# CLARK-l ignores -k and always uses its own light k-mer size (27).
-	printf '%s\n' "$line" | grep -Eq 'build_s=[0-9.e+-]+ load_s=[0-9.e+-]+ match_s=[0-9.e+-]+ write_s=[0-9.e+-]+ kmer=27 nbObjects=1$' \
+	printf '%s\n' "$line" | grep -Eq 'build_ns=[0-9.e+-]+ load_ns=[0-9.e+-]+ match_ns=[0-9.e+-]+ write_ns=[0-9.e+-]+ kmer=27 nbObjects=1$' \
 		|| fail "CUD_PROFILE line has an unexpected format: $line"
 
 	pass "CLARK_CUD_PROFILE opt-in prints a build/load/match/write breakdown only when requested"

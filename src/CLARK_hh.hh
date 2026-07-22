@@ -34,6 +34,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <sstream>
+#include <time.h>
 #include "./dataType.hh"
 #include "./HashTableStorage_hh.hh"
 #include "./spacedKmer.hh"
@@ -87,6 +88,33 @@ static inline uint64_t cudRdtsc()
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+#endif
+}
+
+// Calibrates cycles-per-second for cudRdtsc() by bracketing a short sleep
+// with CLOCK_MONOTONIC (ground truth) and cudRdtsc() reads. On the
+// non-x86 fallback, cudRdtsc() already returns nanoseconds, so this
+// returns 1e9 (i.e., a no-op conversion factor).
+static inline double cudCalibrateTscHz()
+{
+#if CUD_HAVE_RDTSC
+	struct timespec ts0, ts1;
+	clock_gettime(CLOCK_MONOTONIC, &ts0);
+	uint64_t c0 = cudRdtsc();
+	struct timespec sleepFor;
+	sleepFor.tv_sec = 0;
+	sleepFor.tv_nsec = 50000000L; // 50 ms
+	nanosleep(&sleepFor, NULL);
+	uint64_t c1 = cudRdtsc();
+	clock_gettime(CLOCK_MONOTONIC, &ts1);
+	double elapsedSec = (ts1.tv_sec - ts0.tv_sec) + (ts1.tv_nsec - ts0.tv_nsec) / 1e9;
+	if (elapsedSec <= 0.0)
+	{
+		return 1e9;
+	}
+	return (double) (c1 - c0) / elapsedSec;
+#else
+	return 1e9;
 #endif
 }
 
@@ -170,6 +198,7 @@ class CLARK
 		// CLARK_CUD_PROFILE_FINE=1 (adds per-k-mer timer overhead, unlike
 		// the phase timings above).
 		bool					m_fineProfile;
+		double					m_tscHz;
 		std::vector<uint64_t>			m_matchCycles;
 		std::vector<uint64_t>			m_hitsCycles;
 		std::vector<uint64_t>			m_classifyCycles;
@@ -480,6 +509,7 @@ CLARK<HKMERr>::CLARK(const size_t& 	_kmerLength,
 	}
 
 	m_fineProfile = getenv("CLARK_CUD_PROFILE_FINE") != NULL;
+	m_tscHz = m_fineProfile ? cudCalibrateTscHz() : 0.0;
 	m_matchCycles.assign(m_nbCPU, 0);
 	m_hitsCycles.assign(m_nbCPU, 0);
 	m_classifyCycles.assign(m_nbCPU, 0);
@@ -3012,9 +3042,9 @@ void CLARK<HKMERr>::print(const bool& _creatingkmfiles, const ITYPE& _samplingfa
 template <typename HKMERr>
 void CLARK<HKMERr>::printSpeedStats(const struct timeval& _requestEnd, const struct timeval& _requestStart, const char* _fileResult) const 
 {
-	double diff = (_requestEnd.tv_sec - _requestStart.tv_sec) + (_requestEnd.tv_usec - _requestStart.tv_usec) / 1000000.0;
-	cout <<" - Assignment time: "<<diff<<" s. Speed: ";
-	cout << (size_t) (((double) m_nbObjects)/(diff)*60.0)<<" objects/min. ("<< m_nbObjects<<" objects)."<<endl;
+	double diffSec = (_requestEnd.tv_sec - _requestStart.tv_sec) + (_requestEnd.tv_usec - _requestStart.tv_usec) / 1000000.0;
+	cout <<" - Assignment time: "<<(diffSec * 1e9)<<" ns. Speed: ";
+	cout << (size_t) (((double) m_nbObjects)/diffSec)<<" objects/s. ("<< m_nbObjects<<" objects)."<<endl;
 	cout <<" - Results stored in " << _fileResult << endl;
 }
 
@@ -3025,12 +3055,15 @@ void CLARK<HKMERr>::printCuDProfile(const struct timeval& _requestStart, const s
 	{
 		return;
 	}
-	double matchDiff = (m_matchEndTime.tv_sec - _requestStart.tv_sec) + (m_matchEndTime.tv_usec - _requestStart.tv_usec) / 1000000.0;
-	double writeDiff = (_requestEnd.tv_sec - m_matchEndTime.tv_sec) + (_requestEnd.tv_usec - m_matchEndTime.tv_usec) / 1000000.0;
-	cout << "CUD_PROFILE build_s=" << m_buildTimeSec
-		<< " load_s=" << m_loadTimeSec
-		<< " match_s=" << matchDiff
-		<< " write_s=" << writeDiff
+	double matchDiffSec = (m_matchEndTime.tv_sec - _requestStart.tv_sec) + (m_matchEndTime.tv_usec - _requestStart.tv_usec) / 1000000.0;
+	double writeDiffSec = (_requestEnd.tv_sec - m_matchEndTime.tv_sec) + (_requestEnd.tv_usec - m_matchEndTime.tv_usec) / 1000000.0;
+	// Note: gettimeofday only has microsecond resolution, so these ns
+	// values are exact multiples of 1000 -- the unit is nanoseconds, but
+	// the underlying resolution is still microseconds.
+	cout << "CUD_PROFILE build_ns=" << (m_buildTimeSec * 1e9)
+		<< " load_ns=" << (m_loadTimeSec * 1e9)
+		<< " match_ns=" << (matchDiffSec * 1e9)
+		<< " write_ns=" << (writeDiffSec * 1e9)
 		<< " kmer=" << m_kmerSize
 		<< " nbObjects=" << m_nbObjects
 		<< endl;
@@ -3054,14 +3087,20 @@ void CLARK<HKMERr>::printCuDProfileFine() const
 		hitsCalls += m_hitsCalls[t];
 		classifyCalls += m_classifyCalls[t];
 	}
-	cout << "CUD_PROFILE_FINE"
-		<< (CUD_HAVE_RDTSC ? " unit=cycles" : " unit=nanoseconds")
-		<< " match=" << matchCycles
-		<< " hits=" << hitsCycles
-		<< " classify=" << classifyCycles
+	// m_tscHz is cycles-per-second (calibrated at startup on x86; on the
+	// non-x86 fallback cudRdtsc() already returns nanoseconds, so m_tscHz
+	// is fixed at 1e9 and this division is a no-op).
+	double matchNs = (double) matchCycles / m_tscHz * 1e9;
+	double hitsNs = (double) hitsCycles / m_tscHz * 1e9;
+	double classifyNs = (double) classifyCycles / m_tscHz * 1e9;
+	cout << "CUD_PROFILE_FINE unit=ns"
+		<< " match_ns=" << matchNs
+		<< " hits_ns=" << hitsNs
+		<< " classify_ns=" << classifyNs
 		<< " match_calls=" << matchCalls
 		<< " hits_calls=" << hitsCalls
 		<< " classify_calls=" << classifyCalls
+		<< " tsc_hz=" << m_tscHz
 		<< endl;
 }
 
