@@ -1337,6 +1337,72 @@ test_make_sample_requires_configured_targets() {
 	pass "make_sample.sh requires configured targets before sampling"
 }
 
+test_batch_classify_run_all() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/Protozoa" "$dbdir/taxonomy"
+	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
+	ln -s "$REPO_DIR/exe" "$fake_home/exe"
+	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
+
+	genome_v="$dbdir/Viruses/GCF_700000001.1_VirusX_genomic.fna"
+	genome_p="$dbdir/Protozoa/GCF_700000002.1_ProtoY_genomic.fna"
+	{
+		printf '>NC_700000001.1 Virus X\n'
+		python3 -c "import random; random.seed(11); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome_v"
+	{
+		printf '>NC_700000002.1 Protozoan Y\n'
+		python3 -c "import random; random.seed(12); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome_p"
+
+	printf '%s\n' "$genome_v" > "$dbdir/.viruses"
+	printf '%s\n' "$genome_p" > "$dbdir/.protozoa"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'viruses\tviral\tGCF_700000001.1\t700001\t700001\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000001.1_VirusX/GCF_700000001.1_VirusX_genomic.fna.gz\n'
+	} > "$dbdir/.viruses.provenance.tsv"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'protozoa\tprotozoa\tGCF_700000002.1\t700002\t700002\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000002.1_ProtoY/GCF_700000002.1_ProtoY_genomic.fna.gz\n'
+	} > "$dbdir/.protozoa.provenance.tsv"
+	printf '700001 | 2 | species |\n700002 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	results_dir="$tmp/results"
+	CLARK_HOME="$fake_home" CLARK_VARIANT_EXE=CLARK-l CLARK_THREADS=2 CLARK_SAMPLE_COUNT=6 CLARK_SAMPLE_LEN=100 \
+	CLARK_BATCH_RESULTS_DIR="$results_dir" \
+		"$REPO_DIR/batch-classify/run_all.sh" "$dbdir" viruses protozoa > "$tmp/stdout" 2> "$tmp/stderr" ||
+		fail "batch-classify/run_all.sh exited non-zero: $(cat "$tmp/stderr")"
+
+	v_results="$results_dir/viruses/results.csv"
+	p_results="$results_dir/protozoa/results.csv"
+	require_file "$v_results"
+	require_file "$p_results"
+
+	[ "$(grep -c '^sample_' "$v_results")" -eq 6 ] || fail "batch-classify did not classify 6 viruses reads"
+	[ "$(grep -c '^sample_' "$p_results")" -eq 6 ] || fail "batch-classify did not classify 6 protozoa reads"
+
+	# A tiny synthetic genome has few discriminative k-mers, so an occasional
+	# read can come back "NA" (no marker overlap); that's expected noise, not
+	# a bug. What must never happen is a read assigned to the *other* type's
+	# taxid, which would mean cross-contamination between iterations.
+	if grep '^sample_' "$v_results" | awk -F',' '{ gsub(/ /, "", $3); if ($3 == "700002") exit 1 }'; then :; else
+		fail "batch-classify's viruses run assigned a read to the protozoa taxid"
+	fi
+	grep -Fq ',700001' "$v_results" || fail "batch-classify did not correctly classify any viruses read"
+	if grep '^sample_' "$p_results" | awk -F',' '{ gsub(/ /, "", $3); if ($3 == "700001") exit 1 }'; then :; else
+		fail "batch-classify's protozoa run assigned a read to the viruses taxid"
+	fi
+	grep -Fq ',700002' "$p_results" || fail "batch-classify did not correctly classify any protozoa read"
+
+	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
+}
+
 test_get_targets_def_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-targets-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1728,6 +1794,7 @@ test_make_metadata_uses_refseq_provenance_taxids
 test_documentation_script_paths
 test_make_sample_smoke
 test_make_sample_requires_configured_targets
+test_batch_classify_run_all
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke
