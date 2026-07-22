@@ -1294,6 +1294,49 @@ test_documentation_script_paths() {
 	pass "README documents scripts/ commands without root-relative script paths"
 }
 
+test_make_sample_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-make-sample-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	genome="$tmp/refA.fa"
+	{
+		printf '>refA synthetic\n'
+		python3 -c "import random; random.seed(1); print(''.join(random.choice('ACGT') for _ in range(2000)))"
+	} > "$genome"
+
+	targets="$tmp/targets.txt"
+	printf '%s\t111\n' "$genome" > "$targets"
+
+	settings="$tmp/.settings"
+	printf -- '-T %s\n-D %s/db/\n' "$targets" "$tmp" > "$settings"
+
+	out="$tmp/sample.fa"
+	CLARK_SETTINGS_FILE="$settings" "$REPO_DIR/scripts/make_sample.sh" -n 4 -l 50 -o "$out" --seed 42 >/dev/null
+
+	[ -s "$out" ] || fail "make_sample.sh did not write an output file"
+	count=$(grep -c '^>' "$out")
+	[ "$count" -eq 4 ] || fail "make_sample.sh did not write the requested number of reads (got $count)"
+	grep -Fq "taxid=111" "$out" || fail "make_sample.sh did not tag reads with the target taxid"
+
+	if grep -v '^>' "$out" | grep -qvE '^[ACGT]{50}$'; then
+		fail "make_sample.sh emitted a read that is not exactly the requested length"
+	fi
+
+	pass "make_sample.sh samples reads of the requested count and length from configured targets"
+}
+
+test_make_sample_requires_configured_targets() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-make-sample-missing-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	err="$tmp/stderr"
+	if CLARK_SETTINGS_FILE="$tmp/missing-settings" "$REPO_DIR/scripts/make_sample.sh" -n 3 -o "$tmp/sample.fa" >/dev/null 2>"$err"; then
+		fail "make_sample.sh accepted a missing settings file"
+	fi
+	grep -Fq "scripts/set_targets.sh" "$err" || fail "make_sample.sh did not explain how to configure targets"
+	pass "make_sample.sh requires configured targets before sampling"
+}
+
 test_get_targets_def_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-targets-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1683,6 +1726,8 @@ test_refseq_downloader_success_matrix
 test_refseq_downloader_filters_and_resumes
 test_make_metadata_uses_refseq_provenance_taxids
 test_documentation_script_paths
+test_make_sample_smoke
+test_make_sample_requires_configured_targets
 test_get_targets_def_smoke
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke

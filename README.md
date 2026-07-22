@@ -23,11 +23,6 @@ See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a step-by-step workflow and
 version. See [docs/TESTING.md](docs/TESTING.md) for the current test coverage
 and known gaps.
 
-See [dev-test/README.md](dev-test/README.md) for a small, network-free
-example that exercises `set_targets.sh` and `classify_metagenome.sh`
-end to end against synthetic data, useful for confirming the pipeline
-works in your environment before downloading a real database.
-
 ## Authors
 
 - **Rachid Ounit** (1)
