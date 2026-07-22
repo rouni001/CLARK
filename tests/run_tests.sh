@@ -1425,6 +1425,34 @@ test_get_targets_def_smoke() {
 	pass "getTargetsDef helper emits expected target definitions"
 }
 
+test_get_targets_def_exit_code_ignores_excluded_count() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-targets-excluded-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	lineage="$tmp/fileToTaxIDs.txt"
+	out="$tmp/targets.txt"
+
+	{
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$tmp/refA.fa" "111" "111" "222" "333" "444" "555" "666"
+		printf '%s\t-1\n' "$tmp/refB.fa"
+		printf '%s\t-1\n' "$tmp/refC.fa"
+	} > "$lineage"
+
+	set +e
+	(
+		cd "$tmp"
+		"$REPO_DIR/exe/getTargetsDef" "$lineage" 0 > "$out"
+	)
+	rc=$?
+	set -e
+
+	[ "$rc" -eq 0 ] || fail "getTargetsDef exited non-zero ($rc) when some files were excluded; this makes scripts/set_targets.sh (set -e) abort silently with no error message"
+	grep -Fq "$tmp/refA.fa	111" "$out" || fail "getTargetsDef did not emit the target for the one resolvable file"
+	grep -Fq "$tmp/refB.fa" "$tmp/files_excluded.txt" || fail "getTargetsDef did not record refB as excluded"
+	grep -Fq "$tmp/refC.fa" "$tmp/files_excluded.txt" || fail "getTargetsDef did not record refC as excluded"
+	pass "getTargetsDef exits 0 regardless of how many files were excluded"
+}
+
 test_get_accssn_taxid_smoke() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-accession-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1796,6 +1824,7 @@ test_make_sample_smoke
 test_make_sample_requires_configured_targets
 test_batch_classify_run_all
 test_get_targets_def_smoke
+test_get_targets_def_exit_code_ignores_excluded_count
 test_get_accssn_taxid_smoke
 test_getfiles_to_taxnodes_smoke
 test_exe_seq_smoke

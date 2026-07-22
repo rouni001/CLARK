@@ -92,5 +92,5 @@ int main(int argc, char** argv)
 	}
 	fclose(fd);
 	fout.close();
-	return nbFilesExcluded;
+	return 0;
 }
