@@ -269,6 +269,24 @@ class CLARK
 				const struct timeval& 				_requestEnd
 				) const;
 
+		// CuD profiling: split out of the hot loop as separate (non-inlined)
+		// symbols so `perf report`/`perf annotate` can attribute samples to
+		// "hits update" vs "classification" vs the k-mer matching call
+		// (EHashtable::queryElement) without adding per-k-mer timer overhead.
+		void updateHits(ITYPE* 					_resultTargets,
+				ITYPE* 						_iTable,
+				ILBL* 						_idx,
+				size_t& 					_iSize,
+				const ILBL& 					_h,
+				const ITYPE& 					_token
+				) const __attribute__((noinline));
+
+		void classifyBest(const ITYPE& 				_score,
+				const ILBL& 					_h,
+				ILBL& 						_opt_h,
+				ITYPE& 						_s_best
+				) const __attribute__((noinline));
+
 		void getdbName(char * 						_dbname,
 				const int& 					_htID  = 0    	
 			      ) const;
@@ -1601,15 +1619,8 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 							// Query to HashTable (Thread-safe)
 							if (m_centralHt->queryElement(_km_f, h))
 							{
-								if (iTable[h] != token)
-								{
-									iTable[h] = token;
-									resultTargets[h] = 0;
-									idx[iSize++] = h;
-								}
-								resultTargets[h] += 2;
-								if (resultTargets[h] >= s_best)
-								{       opt_h = h+1; s_best = resultTargets[h];  }
+								updateHits(resultTargets, iTable, idx, iSize, h, token);
+								classifyBest(resultTargets[h], h, opt_h, s_best);
 								if (resultTargets[h] > capacity)
 								{       break;  }
 								i_c++;
@@ -1627,15 +1638,8 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 							// Query to HashTable (Thread-safe)
 							if (m_centralHt->queryElement(_km_r, h))
 							{
-								if (iTable[h] != token)
-								{
-									iTable[h] = token;
-									resultTargets[h] = 0;
-									idx[iSize++] = h;
-								}
-								resultTargets[h] +=  2;
-								if (resultTargets[h] >= s_best)
-								{       opt_h = h+1; s_best = resultTargets[h];  }
+								updateHits(resultTargets, iTable, idx, iSize, h, token);
+								classifyBest(resultTargets[h], h, opt_h, s_best);
 								if (resultTargets[h] > capacity)
 								{       break;  }
 								i_c++;
@@ -2933,6 +2937,28 @@ void CLARK<HKMERr>::printCuDProfile(const struct timeval& _requestStart, const s
 		<< " kmer=" << m_kmerSize
 		<< " nbObjects=" << m_nbObjects
 		<< endl;
+}
+
+template <typename HKMERr>
+void CLARK<HKMERr>::updateHits(ITYPE* _resultTargets, ITYPE* _iTable, ILBL* _idx, size_t& _iSize, const ILBL& _h, const ITYPE& _token) const
+{
+	if (_iTable[_h] != _token)
+	{
+		_iTable[_h] = _token;
+		_resultTargets[_h] = 0;
+		_idx[_iSize++] = _h;
+	}
+	_resultTargets[_h] += 2;
+}
+
+template <typename HKMERr>
+void CLARK<HKMERr>::classifyBest(const ITYPE& _score, const ILBL& _h, ILBL& _opt_h, ITYPE& _s_best) const
+{
+	if (_score >= _s_best)
+	{
+		_opt_h = _h + 1;
+		_s_best = _score;
+	}
 }
 
 template <typename HKMERr>
