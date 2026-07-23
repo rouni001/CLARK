@@ -1394,6 +1394,149 @@ test_make_sample_requires_configured_targets() {
 	pass "make_sample.sh requires configured targets before sampling"
 }
 
+test_make_benchmark_reads_hiseq_profile() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-make-benchmark-hiseq-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	genome="$tmp/refA.fa"
+	{
+		printf '>refA synthetic\n'
+		python3 -c "import random; random.seed(2); print(''.join(random.choice('ACGT') for _ in range(5000)))"
+	} > "$genome"
+
+	targets="$tmp/targets.txt"
+	printf '%s\t222\n' "$genome" > "$targets"
+
+	settings="$tmp/.settings"
+	printf -- '-T %s\n-D %s/db/\n' "$targets" "$tmp" > "$settings"
+
+	out="$tmp/benchmark.fa"
+	truth="$tmp/benchmark.fa.truth.tsv"
+	CLARK_SETTINGS_FILE="$settings" "$REPO_DIR/scripts/make_benchmark_reads.sh" -p hiseq -n 15 -o "$out" --seed 5 >/dev/null
+
+	[ -s "$out" ] || fail "make_benchmark_reads.sh did not write an output FASTA"
+	count=$(grep -c '^>' "$out")
+	[ "$count" -eq 15 ] || fail "make_benchmark_reads.sh did not write the requested number of reads (got $count)"
+
+	if grep -v '^>' "$out" | grep -qvE '^[ACGT]{92}$'; then
+		fail "make_benchmark_reads.sh hiseq profile did not emit 92 bp reads"
+	fi
+	grep -Fq "taxid=222" "$out" || fail "make_benchmark_reads.sh did not tag reads with the source taxid"
+	grep -Fq "profile=hiseq" "$out" || fail "make_benchmark_reads.sh did not tag reads with their profile"
+
+	require_file "$truth"
+	[ "$(tail -n +2 "$truth" | wc -l)" -eq 15 ] || fail "ground-truth TSV does not have one row per read"
+	head -n1 "$truth" | grep -Fq "read_id" || fail "ground-truth TSV is missing its header"
+	grep -Fq "222" "$truth" || fail "ground-truth TSV did not record the source taxid"
+
+	pass "make_benchmark_reads.sh hiseq profile emits 92 bp reads with matching ground truth"
+}
+
+test_make_benchmark_reads_error_injection() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-make-benchmark-error-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	genome="$tmp/refA.fa"
+	seq="$(python3 -c "import random; random.seed(3); print(''.join(random.choice('ACGT') for _ in range(2000)))")"
+	printf '>refA synthetic\n%s\n' "$seq" > "$genome"
+
+	targets="$tmp/targets.txt"
+	printf '%s\t333\n' "$genome" > "$targets"
+
+	out="$tmp/benchmark.fa"
+	truth="$tmp/benchmark.fa.truth.tsv"
+	"$REPO_DIR/scripts/make_benchmark_reads.sh" -p custom -n 5 -l 40 -e 1.0 -T "$targets" -o "$out" --seed 9 >/dev/null
+
+	if python3 - "$out" "$seq" <<'PYEOF'
+import sys
+
+out_path, seq = sys.argv[1], sys.argv[2]
+with open(out_path) as handle:
+    lines = [line.rstrip("\n") for line in handle]
+
+i = 0
+checked = 0
+while i < len(lines):
+    header = lines[i]
+    read = lines[i + 1]
+    i += 2
+    pos = header.split("pos=")[1].split("|")[0]
+    start, end = (int(x) for x in pos.split("-"))
+    original = seq[start:end]
+    for a, b in zip(original, read):
+        if a == b:
+            sys.exit("error_rate=1.0 should mutate every base, but found an unchanged base")
+    checked += 1
+
+if checked != 5:
+    sys.exit("expected to check 5 reads, checked %d" % checked)
+PYEOF
+	then :; else fail "make_benchmark_reads.sh error injection did not mutate every base at error_rate=1.0"; fi
+
+	out0="$tmp/benchmark0.fa"
+	"$REPO_DIR/scripts/make_benchmark_reads.sh" -p custom -n 5 -l 40 -e 0 -T "$targets" -o "$out0" --seed 9 >/dev/null
+	if python3 - "$out0" "$seq" <<'PYEOF'
+import sys
+
+out_path, seq = sys.argv[1], sys.argv[2]
+with open(out_path) as handle:
+    lines = [line.rstrip("\n") for line in handle]
+
+i = 0
+while i < len(lines):
+    header = lines[i]
+    read = lines[i + 1]
+    i += 2
+    pos = header.split("pos=")[1].split("|")[0]
+    start, end = (int(x) for x in pos.split("-"))
+    original = seq[start:end]
+    if original != read:
+        sys.exit("error_rate=0 should leave reads identical to the source genome")
+PYEOF
+	then :; else fail "make_benchmark_reads.sh emitted a mutated base at error_rate=0"; fi
+
+	pass "make_benchmark_reads.sh error injection respects the requested substitution rate"
+}
+
+test_eval_accuracy_smoke() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-eval-accuracy-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	truth="$tmp/truth.tsv"
+	{
+		printf 'read_id\ttrue_taxid\tsource_file\tprofile\n'
+		printf 'read1\t100\tgenomeA\tcustom\n'
+		printf 'read2\t100\tgenomeA\tcustom\n'
+		printf 'read3\t200\tgenomeB\tcustom\n'
+		printf 'read4\t200\tgenomeB\tcustom\n'
+		printf 'read5\t300\tgenomeC\tcustom\n'
+	} > "$truth"
+
+	results="$tmp/results.csv"
+	{
+		printf 'Object_ID, Length, Assignment\n'
+		printf 'read1,40,100\n'
+		printf 'read2,40,200\n'
+		printf 'read3,40,NA\n'
+		printf 'read4,40,200\n'
+		printf 'read5,40,100\n'
+	} > "$results"
+
+	out="$tmp/stdout"
+	python3 "$REPO_DIR/scripts/eval_accuracy.py" --results "$results" --ground-truth "$truth" --per-taxid > "$out"
+
+	grep -Fq "reads_total=5 tp=2 fp=2 fn=3 sensitivity=0.400000 precision=0.500000" "$out" ||
+		fail "eval_accuracy.py did not compute the expected micro-averaged sensitivity/precision"
+	grep -Fq "taxid=100 tp=1 fp=1 fn=1 sensitivity=0.500000 precision=0.500000" "$out" ||
+		fail "eval_accuracy.py did not compute the expected per-taxid breakdown for taxid 100"
+	grep -Fq "taxid=200 tp=1 fp=1 fn=1 sensitivity=0.500000 precision=0.500000" "$out" ||
+		fail "eval_accuracy.py did not compute the expected per-taxid breakdown for taxid 200"
+	grep -Fq "taxid=300 tp=0 fp=0 fn=1 sensitivity=0.000000 precision=0.000000" "$out" ||
+		fail "eval_accuracy.py did not compute the expected per-taxid breakdown for taxid 300"
+
+	pass "eval_accuracy.py computes micro-averaged and per-taxid sensitivity/precision"
+}
+
 test_batch_classify_run_all() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -1458,6 +1601,72 @@ test_batch_classify_run_all() {
 	grep -Fq ',700002' "$p_results" || fail "batch-classify did not correctly classify any protozoa read"
 
 	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
+}
+
+test_batch_classify_run_benchmark() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-benchmark-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/Protozoa" "$dbdir/taxonomy"
+	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
+	ln -s "$REPO_DIR/exe" "$fake_home/exe"
+	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
+
+	genome_v="$dbdir/Viruses/GCF_700000003.1_VirusZ_genomic.fna"
+	genome_p="$dbdir/Protozoa/GCF_700000004.1_ProtoW_genomic.fna"
+	{
+		printf '>NC_700000003.1 Virus Z\n'
+		python3 -c "import random; random.seed(21); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome_v"
+	{
+		printf '>NC_700000004.1 Protozoan W\n'
+		python3 -c "import random; random.seed(22); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome_p"
+
+	printf '%s\n' "$genome_v" > "$dbdir/.viruses"
+	printf '%s\n' "$genome_p" > "$dbdir/.protozoa"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'viruses\tviral\tGCF_700000003.1\t700003\t700003\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000003.1_VirusZ/GCF_700000003.1_VirusZ_genomic.fna.gz\n'
+	} > "$dbdir/.viruses.provenance.tsv"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'protozoa\tprotozoa\tGCF_700000004.1\t700004\t700004\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000004.1_ProtoW/GCF_700000004.1_ProtoW_genomic.fna.gz\n'
+	} > "$dbdir/.protozoa.provenance.tsv"
+	printf '700003 | 2 | species |\n700004 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	results_dir="$tmp/results"
+	CLARK_HOME="$fake_home" CLARK_VARIANT_EXE=CLARK-l CLARK_THREADS=2 \
+	CLARK_BENCHMARK_COUNT=6 CLARK_BENCHMARK_LEN=100 CLARK_BENCHMARK_ERROR_RATE=0.01 CLARK_BENCHMARK_SEED=13 \
+	CLARK_BATCH_RESULTS_DIR="$results_dir" \
+		"$REPO_DIR/batch-classify/run_benchmark.sh" "$dbdir" custom viruses protozoa > "$tmp/stdout" 2> "$tmp/stderr" ||
+		fail "batch-classify/run_benchmark.sh exited non-zero: $(cat "$tmp/stderr")"
+
+	v_results="$results_dir/viruses/results.csv"
+	p_results="$results_dir/protozoa/results.csv"
+	v_truth="$results_dir/viruses/objects.fa.truth.tsv"
+	p_truth="$results_dir/protozoa/objects.fa.truth.tsv"
+	v_accuracy="$results_dir/viruses/accuracy.txt"
+	p_accuracy="$results_dir/protozoa/accuracy.txt"
+	require_file "$v_results"
+	require_file "$p_results"
+	require_file "$v_truth"
+	require_file "$p_truth"
+	require_file "$v_accuracy"
+	require_file "$p_accuracy"
+
+	[ "$(grep -c '^custom_' "$v_results")" -eq 6 ] || fail "batch-classify/run_benchmark did not classify 6 viruses reads"
+	[ "$(grep -c '^custom_' "$p_results")" -eq 6 ] || fail "batch-classify/run_benchmark did not classify 6 protozoa reads"
+	[ "$(tail -n +2 "$v_truth" | wc -l)" -eq 6 ] || fail "batch-classify/run_benchmark did not write 6 viruses ground-truth rows"
+
+	grep -Eq "^reads_total=6 " "$v_accuracy" || fail "batch-classify/run_benchmark did not score viruses accuracy against ground truth"
+	grep -Eq "^reads_total=6 " "$p_accuracy" || fail "batch-classify/run_benchmark did not score protozoa accuracy against ground truth"
+
+	pass "batch-classify/run_benchmark.sh samples benchmark reads and scores accuracy per database type"
 }
 
 test_clark_cud_profile_opt_in() {
@@ -1919,7 +2128,11 @@ test_make_metadata_uses_refseq_provenance_taxids
 test_documentation_script_paths
 test_make_sample_smoke
 test_make_sample_requires_configured_targets
+test_make_benchmark_reads_hiseq_profile
+test_make_benchmark_reads_error_injection
+test_eval_accuracy_smoke
 test_batch_classify_run_all
+test_batch_classify_run_benchmark
 test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count

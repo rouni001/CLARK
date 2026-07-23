@@ -64,3 +64,53 @@ Note: CLARK-l crashes with a "Bus error" if the thread count
 being classified (`CLARK_SAMPLE_COUNT`). This is a pre-existing issue
 in CLARK-l itself, not specific to this script. Keep `CLARK_SAMPLE_COUNT`
 comfortably above `CLARK_THREADS` (the defaults, 20 vs. 8, already do).
+
+## `run_benchmark.sh`: a citable benchmark input, with accuracy scoring
+
+`run_all.sh` samples uniformly-random substrings via `scripts/make_sample.sh`
+-- fine for a smoke test, but not something a paper can cite as a benchmark.
+`run_benchmark.sh` instead uses `scripts/make_benchmark_reads.sh`, which
+simulates reads matching the *published characteristics* of datasets other
+metagenomic-classifier papers have used:
+
+| Profile  | Read length | Source genomes         | Error rate | Modeled after |
+|----------|--------------|-------------------------|------------|----------------|
+| `hiseq`  | 92 bp        | 10, equal proportion     | baseline   | Kraken's "HiSeq" set |
+| `miseq`  | 156 bp       | 10, equal proportion     | baseline   | Kraken's "MiSeq" set |
+| `simba5` | 100 bp       | broad draw, all available | 5x baseline | Kraken's "simBA-5" set |
+| `simhc`  | 800 bp       | up to 113, power-law abundance | elevated | FAMeS's "simHC" set |
+| `custom` | you choose   | you choose               | you choose | -- |
+
+CLARK's own BMC Genomics (2015) paper benchmarked against the Kraken
+project's "HiSeq"/"MiSeq"/"simBA-5" read sets and the FAMeS project's
+"simHC" mock community; the ISCA 2021 "Sieve" paper (hardware acceleration
+for k-mer classification) reuses the same lineage. The *original* files
+are hosted on decade-old project pages (`ccb.jhu.edu`, `fames.jgi-psf.org`)
+that may no longer serve the exact original bytes -- `run_benchmark.sh`
+simulates reads matching each profile's spec from whatever genomes
+`scripts/set_targets.sh` already downloaded, rather than re-fetching those
+files. Treat this as a documented approximation in anything you write up,
+not a claim of using the literal original dataset.
+
+```sh
+batch-classify/run_benchmark.sh /path/to/ncbi-db hiseq viruses plasmid plastid fungi human
+```
+
+For each type this samples benchmark reads (with ground truth), classifies
+them, and scores sensitivity/precision (overall and per-taxid) with
+`scripts/eval_accuracy.py`. Results land in `batch-classify/results/<type>/`:
+`objects.fa` (reads), `objects.fa.truth.tsv` (ground truth), `results.csv`
+(CLARK's output), and `accuracy.txt` (sensitivity/precision).
+
+Additional environment overrides (on top of the ones above):
+
+| Variable                     | Meaning                                         |
+|-------------------------------|-------------------------------------------------|
+| `CLARK_BENCHMARK_COUNT`       | override the profile's default read count        |
+| `CLARK_BENCHMARK_LEN`         | override the profile's default read length        |
+| `CLARK_BENCHMARK_ERROR_RATE`  | override the profile's default error rate         |
+| `CLARK_BENCHMARK_NGENOMES`    | override the profile's default source-genome count |
+| `CLARK_BENCHMARK_SEED`        | random seed for reproducible sampling             |
+
+`-p custom` requires count/length/error-rate (`CLARK_BENCHMARK_COUNT` /
+`CLARK_BENCHMARK_LEN` / `CLARK_BENCHMARK_ERROR_RATE`) to be set explicitly.
