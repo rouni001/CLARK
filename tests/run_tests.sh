@@ -1537,6 +1537,87 @@ test_eval_accuracy_smoke() {
 	pass "eval_accuracy.py computes micro-averaged and per-taxid sensitivity/precision"
 }
 
+test_rehome_db_fixes_stale_absolute_paths() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rehome-db-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	# Simulate copying a populated db directory from one machine/home
+	# directory to another: the genome files live under the *new* prefix,
+	# but the cached metadata (.protozoa, .fileToAccssnTaxID,
+	# .fileToTaxIDs) still has the *old* machine's absolute paths baked in
+	# -- exactly the failure a user hit after rsync-ing ncbi-db/ between
+	# /home/h/... and /home/u/... hosts.
+	new_dbdir="$tmp/new-home/ncbi-db"
+	mkdir -p "$new_dbdir/Protozoa"
+	genome="$new_dbdir/Protozoa/GCF_000091205.1_ASM9120v1_genomic.fna"
+	{
+		printf '>NC_000001.1 synthetic protozoan\n'
+		python3 -c "import random; random.seed(31); print(''.join(random.choice('ACGT') for _ in range(500)))"
+	} > "$genome"
+
+	old_genome="/home/h/sykim/kmer-matching-project/ncbi-db/Protozoa/GCF_000091205.1_ASM9120v1_genomic.fna"
+	printf '%s\n' "$old_genome" > "$new_dbdir/.protozoa"
+	printf '%s\tGCF_000091205.1\t5722\n' "$old_genome" > "$new_dbdir/.protozoa.fileToAccssnTaxID"
+	printf '%s\t5722\tspecies\n' "$old_genome" > "$new_dbdir/.protozoa.fileToTaxIDs"
+
+	out="$tmp/stdout"
+	err="$tmp/stderr"
+	"$REPO_DIR/scripts/rehome_db.sh" "$new_dbdir" >"$out" 2>"$err" || fail "rehome_db.sh exited non-zero: $(cat "$err")"
+
+	grep -Fq "$genome" "$new_dbdir/.protozoa" || fail "rehome_db.sh did not repair .protozoa"
+	grep -Fq "$genome" "$new_dbdir/.protozoa.fileToAccssnTaxID" || fail "rehome_db.sh did not repair .fileToAccssnTaxID"
+	grep -Fq "$genome" "$new_dbdir/.protozoa.fileToTaxIDs" || fail "rehome_db.sh did not repair .fileToTaxIDs"
+	grep -Fq "GCF_000091205.1" "$new_dbdir/.protozoa.fileToAccssnTaxID" || fail "rehome_db.sh dropped fields other than the path"
+	grep -Fq "5722" "$new_dbdir/.protozoa.fileToTaxIDs" || fail "rehome_db.sh dropped the taxid field"
+
+	if grep -Fq "/home/h/" "$new_dbdir/.protozoa" "$new_dbdir/.protozoa.fileToAccssnTaxID" "$new_dbdir/.protozoa.fileToTaxIDs"; then
+		fail "rehome_db.sh left a stale old-host path behind"
+	fi
+
+	pass "rehome_db.sh repairs stale absolute paths after copying a db directory to a new host"
+}
+
+test_rehome_db_dry_run_leaves_files_untouched() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rehome-db-dry-run-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	new_dbdir="$tmp/new-home/ncbi-db"
+	mkdir -p "$new_dbdir/Viruses"
+	genome="$new_dbdir/Viruses/GCF_2.fna"
+	printf '>seq\nACGTACGT\n' > "$genome"
+
+	old_genome="/home/h/old-project/ncbi-db/Viruses/GCF_2.fna"
+	printf '%s\n' "$old_genome" > "$new_dbdir/.viruses"
+	before_hash="$(sha256sum "$new_dbdir/.viruses")"
+
+	"$REPO_DIR/scripts/rehome_db.sh" "$new_dbdir" --dry-run >/dev/null 2>&1 || fail "rehome_db.sh --dry-run exited non-zero"
+
+	after_hash="$(sha256sum "$new_dbdir/.viruses")"
+	[ "$before_hash" = "$after_hash" ] || fail "rehome_db.sh --dry-run modified a file on disk"
+
+	pass "rehome_db.sh --dry-run reports without modifying files"
+}
+
+test_rehome_db_reports_unresolvable_paths() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rehome-db-unresolved-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	new_dbdir="$tmp/new-home/ncbi-db"
+	mkdir -p "$new_dbdir/Fungi"
+	# No matching genome file exists anywhere under new_dbdir -- this
+	# genome was never copied over, a real gap, not a path-prefix issue.
+	printf '/home/h/old-project/ncbi-db/Fungi/GCF_missing.fna\n' > "$new_dbdir/.fungi"
+
+	err="$tmp/stderr"
+	if "$REPO_DIR/scripts/rehome_db.sh" "$new_dbdir" >/dev/null 2>"$err"; then
+		fail "rehome_db.sh should exit non-zero when a path cannot be resolved"
+	fi
+	grep -Fq "GCF_missing.fna" "$err" || fail "rehome_db.sh did not report the unresolvable path"
+	grep -Fq "/home/h/old-project/ncbi-db/Fungi/GCF_missing.fna" "$new_dbdir/.fungi" || fail "rehome_db.sh should leave an unresolvable path unchanged"
+
+	pass "rehome_db.sh reports genuinely missing genomes instead of silently dropping them"
+}
+
 test_batch_classify_run_all() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -2131,6 +2212,9 @@ test_make_sample_requires_configured_targets
 test_make_benchmark_reads_hiseq_profile
 test_make_benchmark_reads_error_injection
 test_eval_accuracy_smoke
+test_rehome_db_fixes_stale_absolute_paths
+test_rehome_db_dry_run_leaves_files_untouched
+test_rehome_db_reports_unresolvable_paths
 test_batch_classify_run_all
 test_batch_classify_run_benchmark
 test_clark_cud_profile_opt_in
