@@ -6,10 +6,26 @@
 
 set -euo pipefail
 
-# EDIT THIS if you use -g/--gpu: absolute path to the cuCLARK GPU executable.
-# Everything else (targets, db dir, objects, results, -k/-n) is passed to it
-# exactly as it would be to CLARK, since cuCLARK accepts the same CLI.
-CUCLARK_EXE="${CUCLARK_EXE:-/path/to/cuCLARK}"
+script_dir() {
+	local source="${BASH_SOURCE[0]}"
+	while [ -h "$source" ]; do
+		local dir
+		dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+		source="$(readlink "$source")"
+		[[ "$source" != /* ]] && source="$dir/$source"
+	done
+	cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
+}
+
+SCRIPT_DIR="$(script_dir)"
+
+# Path to the cuCLARK GPU executable, used when -g/--gpu is passed.
+# Defaults to a file named "cuCLARK" sitting right next to this script
+# (batch-classify/cuCLARK) -- drop your binary there under that name and
+# -g works with no further setup. Otherwise either edit this line to the
+# actual path, or override it per-invocation without editing the script:
+#   CUCLARK_EXE=/path/to/your-binary batch-classify/run_all.sh -g ...
+CUCLARK_EXE="${CUCLARK_EXE:-$SCRIPT_DIR/cuCLARK}"
 
 usage() {
 	cat <<'USAGE'
@@ -31,9 +47,10 @@ Options:
               match/write time, plus match/hits-update/classify timing)
               by setting CLARK_CUD_PROFILE=1 and CLARK_CUD_PROFILE_FINE=1
               for the run. CPU (CLARK) only; ignored with -g. (default: off)
-  -g          Run on GPU with cuCLARK instead of CPU CLARK. Edit
-              CUCLARK_EXE at the top of this script to point at your
-              cuCLARK binary. Overrides -x. (default: off)
+  -g          Run on GPU with cuCLARK instead of CPU CLARK. Looks for
+              batch-classify/cuCLARK by default; set CUCLARK_EXE (env var,
+              or edit the top of this script) if yours lives elsewhere.
+              Overrides -x. (default: off)
   -x <name>   CPU executable variant: CLARK, CLARK-l, CLARK-S.
               Ignored if -g is set. (default: CLARK)
   -r <flag>   Taxonomy rank flag for set_targets.sh. (default: --species)
@@ -55,17 +72,6 @@ Results land in <results-dir>/<type>/.
 CLARK_HOME (env var) overrides the repository root; defaults to the
 parent of this script's directory.
 USAGE
-}
-
-script_dir() {
-	local source="${BASH_SOURCE[0]}"
-	while [ -h "$source" ]; do
-		local dir
-		dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
-		source="$(readlink "$source")"
-		[[ "$source" != /* ]] && source="$dir/$source"
-	done
-	cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
 }
 
 die() {
@@ -176,7 +182,6 @@ if [ "${#TYPES[@]}" -eq 0 ]; then
 	TYPES=(viruses plasmid plastid fungi human)
 fi
 
-SCRIPT_DIR="$(script_dir)"
 LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
 
 [ -d "$DBDR_INPUT" ] || die "database directory '$DBDR_INPUT' does not exist"
@@ -184,7 +189,7 @@ DBDR="$(cd -P "$DBDR_INPUT" >/dev/null 2>&1 && pwd)"
 
 if [ "$GPU" -eq 1 ]; then
 	CLASSIFY_EXE="$CUCLARK_EXE"
-	[ -x "$CLASSIFY_EXE" ] || die "missing GPU executable '$CLASSIFY_EXE'. Edit CUCLARK_EXE at the top of this script to point at your cuCLARK binary."
+	[ -x "$CLASSIFY_EXE" ] || die "missing GPU executable '$CLASSIFY_EXE'. Put your cuCLARK binary at that path (or set CUCLARK_EXE / edit the top of this script)."
 else
 	CLASSIFY_EXE="$LDIR/exe/$VARIANT_EXE"
 	[ -x "$CLASSIFY_EXE" ] || die "missing executable '$CLASSIFY_EXE'. Run 'make all' from the CLARK repository root first."

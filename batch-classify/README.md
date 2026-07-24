@@ -67,10 +67,21 @@ from a checkout where this script's parent directory is the repo root.
 `-g` swaps the classifier from the CPU `exe/<variant>` binary to cuCLARK.
 Everything else about the run (targets, database directory, objects,
 results, `-k`/`-n`) is passed to it exactly as it would be to CLARK, since
-cuCLARK accepts the same CLI. Edit the `CUCLARK_EXE` path at the top of
-`run_all.sh` (or set the `CUCLARK_EXE` environment variable) to point at
-your cuCLARK binary before using `-g`. `-p`'s CuD profiling env vars are
-CLARK-specific and are not set when `-g` is used.
+cuCLARK accepts the same CLI.
+
+By default `-g` looks for a binary named `cuCLARK` sitting right next to
+`run_all.sh`, i.e. `batch-classify/cuCLARK` -- drop your executable there
+under that name and `-g` works with no further setup. If yours lives
+elsewhere or is named differently, either set the `CUCLARK_EXE`
+environment variable to its path, or edit the `CUCLARK_EXE` line at the
+top of `run_all.sh`:
+
+```sh
+CUCLARK_EXE=/path/to/your-cuCLARK-binary batch-classify/run_all.sh -d /path/to/ncbi-db -g
+```
+
+`-p`'s CuD profiling env vars are CLARK-specific and are not set when
+`-g` is used.
 
 Note: CLARK's default/full mode has a large fixed baseline memory
 footprint regardless of database size (see main `README.md`'s Memory
