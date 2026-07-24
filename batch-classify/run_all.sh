@@ -6,35 +6,40 @@
 
 set -euo pipefail
 
+# EDIT THIS if you use -g/--gpu: absolute path to the cuCLARK GPU executable.
+# Everything else (targets, db dir, objects, results, -k/-n) is passed to it
+# exactly as it would be to CLARK, since cuCLARK accepts the same CLI.
+CUCLARK_EXE="${CUCLARK_EXE:-/path/to/cuCLARK}"
+
 usage() {
 	cat <<'USAGE'
-Usage: batch-classify/run_all.sh --db-dir <path> [options]
+Usage: batch-classify/run_all.sh -d <db-dir> [options]
 
 Required:
-  --db-dir <path>        Database directory previously passed to
-                          scripts/set_targets.sh (the one containing each
-                          type's genomes, taxonomy/, and <type>_0/ database
-                          folders).
+  -d <path>   Database directory previously passed to scripts/set_targets.sh
+              (the one containing each type's genomes, taxonomy/, and
+              <type>_0/ database folders).
 
 Options:
-  --types <t1,t2,...>     Comma- or space-separated database types to run.
-                          (default: viruses,plasmid,plastid,fungi,human)
-  --threads <n>           Thread count passed to CLARK's -n. (default: 8)
-  --sample-count <n>      Number of reads to sample per type. (default: 20)
-  --sample-len <n>        Sampled read length. (default: 150)
-  --kmer <n>              k-mer size passed to CLARK's -k. (default: 31)
-  --profile               Enable CLARK's opt-in CuD performance breakdown
-                          (build/load/match/write time, plus the fine
-                          match/hits-update/classify timing) by setting
-                          CLARK_CUD_PROFILE=1 and CLARK_CUD_PROFILE_FINE=1
-                          for the CLARK invocation. (default: off)
-  --variant-exe <name>    CLARK executable to run: CLARK, CLARK-l, CLARK-S.
-                          (default: CLARK)
-  --rank <flag>           Taxonomy rank flag for set_targets.sh.
-                          (default: --species)
-  --results-dir <path>    Where per-type results land.
-                          (default: this script's results/ directory)
-  -h, --help              Show this message.
+  -t <list>   Comma- or space-separated database types to run.
+              (default: viruses,plasmid,plastid,fungi,human)
+  -n <n>      Thread count passed to -n. (default: 8)
+  -c <n>      Number of reads to sample per type. (default: 20)
+  -l <n>      Sampled read length. (default: 150)
+  -k <n>      k-mer size passed to -k. (default: 31)
+  -p          Enable the opt-in CuD performance breakdown (build/load/
+              match/write time, plus match/hits-update/classify timing)
+              by setting CLARK_CUD_PROFILE=1 and CLARK_CUD_PROFILE_FINE=1
+              for the run. CPU (CLARK) only; ignored with -g. (default: off)
+  -g          Run on GPU with cuCLARK instead of CPU CLARK. Edit
+              CUCLARK_EXE at the top of this script to point at your
+              cuCLARK binary. Overrides -x. (default: off)
+  -x <name>   CPU executable variant: CLARK, CLARK-l, CLARK-S.
+              Ignored if -g is set. (default: CLARK)
+  -r <flag>   Taxonomy rank flag for set_targets.sh. (default: --species)
+  -o <path>   Where per-type results land.
+              (default: this script's results/ directory)
+  -h          Show this message.
 
 For each type, this:
   1. Re-runs scripts/set_targets.sh <db-dir> <type> <rank> to regenerate
@@ -42,8 +47,8 @@ For each type, this:
      needed -- sequences and taxonomy are already downloaded).
   2. Samples a fresh objects.fa from that type's own targets via
      scripts/make_sample.sh.
-  3. Classifies it with exe/<variant> -k <kmer> -T <targets> -D <DBD/> -O
-     <objects.fa> -R <results> -n <threads>.
+  3. Classifies it with the chosen executable: -k <kmer> -T <targets>
+     -D <DBD/> -O <objects.fa> -R <results> -n <threads>.
 
 Results land in <results-dir>/<type>/.
 
@@ -82,6 +87,7 @@ SAMPLE_COUNT=20
 SAMPLE_LEN=150
 KMER=31
 PROFILE=0
+GPU=0
 VARIANT_EXE="CLARK"
 RANK_FLAG="--species"
 RESULTS_DIR=""
@@ -93,56 +99,60 @@ fi
 
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		--db-dir)
-			[ "$#" -ge 2 ] || die "--db-dir requires a path"
+		-d)
+			[ "$#" -ge 2 ] || die "-d requires a path"
 			DBDR_INPUT="$2"
 			shift 2
 			;;
-		--types)
-			[ "$#" -ge 2 ] || die "--types requires a comma- or space-separated list"
+		-t)
+			[ "$#" -ge 2 ] || die "-t requires a comma- or space-separated list"
 			TYPES_RAW="$2"
 			shift 2
 			;;
-		--threads)
-			[ "$#" -ge 2 ] || die "--threads requires a positive integer"
-			require_positive_int "--threads" "$2"
+		-n)
+			[ "$#" -ge 2 ] || die "-n requires a positive integer"
+			require_positive_int "-n" "$2"
 			THREADS="$2"
 			shift 2
 			;;
-		--sample-count)
-			[ "$#" -ge 2 ] || die "--sample-count requires a positive integer"
-			require_positive_int "--sample-count" "$2"
+		-c)
+			[ "$#" -ge 2 ] || die "-c requires a positive integer"
+			require_positive_int "-c" "$2"
 			SAMPLE_COUNT="$2"
 			shift 2
 			;;
-		--sample-len)
-			[ "$#" -ge 2 ] || die "--sample-len requires a positive integer"
-			require_positive_int "--sample-len" "$2"
+		-l)
+			[ "$#" -ge 2 ] || die "-l requires a positive integer"
+			require_positive_int "-l" "$2"
 			SAMPLE_LEN="$2"
 			shift 2
 			;;
-		--kmer)
-			[ "$#" -ge 2 ] || die "--kmer requires a positive integer"
-			require_positive_int "--kmer" "$2"
+		-k)
+			[ "$#" -ge 2 ] || die "-k requires a positive integer"
+			require_positive_int "-k" "$2"
 			KMER="$2"
 			shift 2
 			;;
-		--profile)
+		-p)
 			PROFILE=1
 			shift
 			;;
-		--variant-exe)
-			[ "$#" -ge 2 ] || die "--variant-exe requires an executable name"
+		-g)
+			GPU=1
+			shift
+			;;
+		-x)
+			[ "$#" -ge 2 ] || die "-x requires an executable name"
 			VARIANT_EXE="$2"
 			shift 2
 			;;
-		--rank)
-			[ "$#" -ge 2 ] || die "--rank requires a taxonomy rank flag"
+		-r)
+			[ "$#" -ge 2 ] || die "-r requires a taxonomy rank flag"
 			RANK_FLAG="$2"
 			shift 2
 			;;
-		--results-dir)
-			[ "$#" -ge 2 ] || die "--results-dir requires a path"
+		-o)
+			[ "$#" -ge 2 ] || die "-o requires a path"
 			RESULTS_DIR="$2"
 			shift 2
 			;;
@@ -151,12 +161,12 @@ while [ "$#" -gt 0 ]; do
 			exit 0
 			;;
 		*)
-			die "unrecognized option: $1 (see --help)"
+			die "unrecognized option: $1 (see -h)"
 			;;
 	esac
 done
 
-[ -n "$DBDR_INPUT" ] || die "--db-dir is required (see --help)"
+[ -n "$DBDR_INPUT" ] || die "-d <db-dir> is required (see -h)"
 
 TYPES=()
 if [ -n "$TYPES_RAW" ]; then
@@ -172,15 +182,20 @@ LDIR="${CLARK_HOME:-$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)}"
 [ -d "$DBDR_INPUT" ] || die "database directory '$DBDR_INPUT' does not exist"
 DBDR="$(cd -P "$DBDR_INPUT" >/dev/null 2>&1 && pwd)"
 
-CLARK_EXE="$LDIR/exe/$VARIANT_EXE"
-[ -x "$CLARK_EXE" ] || die "missing executable '$CLARK_EXE'. Run 'make all' from the CLARK repository root first."
+if [ "$GPU" -eq 1 ]; then
+	CLASSIFY_EXE="$CUCLARK_EXE"
+	[ -x "$CLASSIFY_EXE" ] || die "missing GPU executable '$CLASSIFY_EXE'. Edit CUCLARK_EXE at the top of this script to point at your cuCLARK binary."
+else
+	CLASSIFY_EXE="$LDIR/exe/$VARIANT_EXE"
+	[ -x "$CLASSIFY_EXE" ] || die "missing executable '$CLASSIFY_EXE'. Run 'make all' from the CLARK repository root first."
+fi
 
 SETTINGS_FILE="$LDIR/.settings"
 OUT_DIR="${RESULTS_DIR:-$SCRIPT_DIR/results}"
 mkdir -p "$OUT_DIR"
 
 PROFILE_ENV=()
-if [ "$PROFILE" -eq 1 ]; then
+if [ "$PROFILE" -eq 1 ] && [ "$GPU" -eq 0 ]; then
 	PROFILE_ENV=(CLARK_CUD_PROFILE=1 CLARK_CUD_PROFILE_FINE=1)
 fi
 
@@ -200,7 +215,7 @@ for type in "${TYPES[@]}"; do
 
 	"$LDIR/scripts/make_sample.sh" -n "$SAMPLE_COUNT" -l "$SAMPLE_LEN" -o "$objects" -T "$targets"
 
-	env "${PROFILE_ENV[@]}" "$CLARK_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
+	env "${PROFILE_ENV[@]}" "$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
 
 	echo "-- $type done: $results.csv"
 done

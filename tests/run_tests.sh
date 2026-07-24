@@ -1656,9 +1656,9 @@ test_batch_classify_run_all() {
 
 	results_dir="$tmp/results"
 	CLARK_HOME="$fake_home" \
-		"$REPO_DIR/batch-classify/run_all.sh" --db-dir "$dbdir" --types viruses,protozoa \
-			--variant-exe CLARK-l --threads 2 --sample-count 6 --sample-len 100 \
-			--results-dir "$results_dir" > "$tmp/stdout" 2> "$tmp/stderr" ||
+		"$REPO_DIR/batch-classify/run_all.sh" -d "$dbdir" -t viruses,protozoa \
+			-x CLARK-l -n 2 -c 6 -l 100 \
+			-o "$results_dir" > "$tmp/stdout" 2> "$tmp/stderr" ||
 		fail "batch-classify/run_all.sh exited non-zero: $(cat "$tmp/stderr")"
 
 	v_results="$results_dir/viruses/results.csv"
@@ -1683,13 +1683,71 @@ test_batch_classify_run_all() {
 	grep -Fq ',700002' "$p_results" || fail "batch-classify did not correctly classify any protozoa read"
 
 	CLARK_HOME="$fake_home" \
-		"$REPO_DIR/batch-classify/run_all.sh" --db-dir "$dbdir" --types viruses \
-			--variant-exe CLARK-l --threads 2 --sample-count 6 --sample-len 100 \
-			--results-dir "$results_dir" --profile > "$tmp/stdout-profile" 2> "$tmp/stderr-profile" ||
-		fail "batch-classify/run_all.sh --profile exited non-zero: $(cat "$tmp/stderr-profile")"
-	grep -Fq "CUD_PROFILE" "$tmp/stdout-profile" || fail "batch-classify/run_all.sh --profile did not print CLARK's CuD performance breakdown"
+		"$REPO_DIR/batch-classify/run_all.sh" -d "$dbdir" -t viruses \
+			-x CLARK-l -n 2 -c 6 -l 100 \
+			-o "$results_dir" -p > "$tmp/stdout-profile" 2> "$tmp/stderr-profile" ||
+		fail "batch-classify/run_all.sh -p exited non-zero: $(cat "$tmp/stderr-profile")"
+	grep -Fq "CUD_PROFILE" "$tmp/stdout-profile" || fail "batch-classify/run_all.sh -p did not print CLARK's CuD performance breakdown"
 
 	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
+}
+
+test_batch_classify_run_all_gpu_flag() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-gpu-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/taxonomy" "$fake_home/exe"
+	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
+	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+
+	genome="$dbdir/Viruses/GCF_700000005.1_VirusQ_genomic.fna"
+	{
+		printf '>NC_700000005.1 Virus Q\n'
+		python3 -c "import random; random.seed(41); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome"
+	printf '%s\n' "$genome" > "$dbdir/.viruses"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'viruses\tviral\tGCF_700000005.1\t700005\t700005\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000005.1_VirusQ/GCF_700000005.1_VirusQ_genomic.fna.gz\n'
+	} > "$dbdir/.viruses.provenance.tsv"
+	printf '700005 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	# Stand in for cuCLARK: record how it was invoked instead of actually
+	# running a GPU classifier (none is available in this test environment).
+	fake_cuclark="$tmp/cuCLARK"
+	capture="$tmp/cuclark-capture.txt"
+	cat > "$fake_cuclark" <<EOF
+#!/usr/bin/env bash
+echo "invoked with: \$*" > "$capture"
+results=""
+while [ "\$#" -gt 0 ]; do
+	if [ "\$1" = "-R" ]; then
+		results="\$2"
+	fi
+	shift
+done
+[ -n "\$results" ] && printf 'Object_ID, Length, Assignment\n' > "\$results.csv"
+EOF
+	chmod +x "$fake_cuclark"
+
+	results_dir="$tmp/results"
+	CLARK_HOME="$fake_home" CUCLARK_EXE="$fake_cuclark" \
+		"$REPO_DIR/batch-classify/run_all.sh" -d "$dbdir" -t viruses -g -n 2 -c 3 -l 80 \
+			-o "$results_dir" > "$tmp/stdout" 2> "$tmp/stderr" ||
+		fail "batch-classify/run_all.sh -g exited non-zero: $(cat "$tmp/stderr")"
+
+	require_file "$capture"
+	grep -Fq -- "-k 31" "$capture" || fail "batch-classify/run_all.sh -g did not pass -k through to cuCLARK"
+	grep -Fq -- "-n 2" "$capture" || fail "batch-classify/run_all.sh -g did not pass -n through to cuCLARK"
+
+	pass "batch-classify/run_all.sh -g dispatches to the configured cuCLARK executable"
 }
 
 test_clark_cud_profile_opt_in() {
@@ -2158,6 +2216,7 @@ test_rehome_db_fixes_stale_absolute_paths
 test_rehome_db_dry_run_leaves_files_untouched
 test_rehome_db_reports_unresolvable_paths
 test_batch_classify_run_all
+test_batch_classify_run_all_gpu_flag
 test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count
