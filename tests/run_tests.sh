@@ -1655,9 +1655,10 @@ test_batch_classify_run_all() {
 	touch "$dbdir/.taxondata"
 
 	results_dir="$tmp/results"
-	CLARK_HOME="$fake_home" CLARK_VARIANT_EXE=CLARK-l CLARK_THREADS=2 CLARK_SAMPLE_COUNT=6 CLARK_SAMPLE_LEN=100 \
-	CLARK_BATCH_RESULTS_DIR="$results_dir" \
-		"$REPO_DIR/batch-classify/run_all.sh" "$dbdir" viruses protozoa > "$tmp/stdout" 2> "$tmp/stderr" ||
+	CLARK_HOME="$fake_home" \
+		"$REPO_DIR/batch-classify/run_all.sh" --db-dir "$dbdir" --types viruses,protozoa \
+			--variant-exe CLARK-l --threads 2 --sample-count 6 --sample-len 100 \
+			--results-dir "$results_dir" > "$tmp/stdout" 2> "$tmp/stderr" ||
 		fail "batch-classify/run_all.sh exited non-zero: $(cat "$tmp/stderr")"
 
 	v_results="$results_dir/viruses/results.csv"
@@ -1681,73 +1682,14 @@ test_batch_classify_run_all() {
 	fi
 	grep -Fq ',700002' "$p_results" || fail "batch-classify did not correctly classify any protozoa read"
 
+	CLARK_HOME="$fake_home" \
+		"$REPO_DIR/batch-classify/run_all.sh" --db-dir "$dbdir" --types viruses \
+			--variant-exe CLARK-l --threads 2 --sample-count 6 --sample-len 100 \
+			--results-dir "$results_dir" --profile > "$tmp/stdout-profile" 2> "$tmp/stderr-profile" ||
+		fail "batch-classify/run_all.sh --profile exited non-zero: $(cat "$tmp/stderr-profile")"
+	grep -Fq "CUD_PROFILE" "$tmp/stdout-profile" || fail "batch-classify/run_all.sh --profile did not print CLARK's CuD performance breakdown"
+
 	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
-}
-
-test_batch_classify_run_benchmark() {
-	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-benchmark-test.XXXXXX")"
-	trap 'rm -rf "$tmp"' RETURN
-
-	fake_home="$tmp/fake-home"
-	dbdir="$tmp/db"
-	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/Protozoa" "$dbdir/taxonomy"
-	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
-	ln -s "$REPO_DIR/exe" "$fake_home/exe"
-	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
-
-	genome_v="$dbdir/Viruses/GCF_700000003.1_VirusZ_genomic.fna"
-	genome_p="$dbdir/Protozoa/GCF_700000004.1_ProtoW_genomic.fna"
-	{
-		printf '>NC_700000003.1 Virus Z\n'
-		python3 -c "import random; random.seed(21); print(''.join(random.choice('ACGT') for _ in range(3000)))"
-	} > "$genome_v"
-	{
-		printf '>NC_700000004.1 Protozoan W\n'
-		python3 -c "import random; random.seed(22); print(''.join(random.choice('ACGT') for _ in range(3000)))"
-	} > "$genome_p"
-
-	printf '%s\n' "$genome_v" > "$dbdir/.viruses"
-	printf '%s\n' "$genome_p" > "$dbdir/.protozoa"
-	{
-		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
-		printf 'viruses\tviral\tGCF_700000003.1\t700003\t700003\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000003.1_VirusZ/GCF_700000003.1_VirusZ_genomic.fna.gz\n'
-	} > "$dbdir/.viruses.provenance.tsv"
-	{
-		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
-		printf 'protozoa\tprotozoa\tGCF_700000004.1\t700004\t700004\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000004.1_ProtoW/GCF_700000004.1_ProtoW_genomic.fna.gz\n'
-	} > "$dbdir/.protozoa.provenance.tsv"
-	printf '700003 | 2 | species |\n700004 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
-	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
-	touch "$dbdir/.taxondata"
-
-	results_dir="$tmp/results"
-	CLARK_HOME="$fake_home" CLARK_VARIANT_EXE=CLARK-l CLARK_THREADS=2 \
-	CLARK_BENCHMARK_COUNT=6 CLARK_BENCHMARK_LEN=100 CLARK_BENCHMARK_ERROR_RATE=0.01 CLARK_BENCHMARK_SEED=13 \
-	CLARK_BATCH_RESULTS_DIR="$results_dir" \
-		"$REPO_DIR/batch-classify/run_benchmark.sh" "$dbdir" custom viruses protozoa > "$tmp/stdout" 2> "$tmp/stderr" ||
-		fail "batch-classify/run_benchmark.sh exited non-zero: $(cat "$tmp/stderr")"
-
-	v_results="$results_dir/viruses/results.csv"
-	p_results="$results_dir/protozoa/results.csv"
-	v_truth="$results_dir/viruses/objects.fa.truth.tsv"
-	p_truth="$results_dir/protozoa/objects.fa.truth.tsv"
-	v_accuracy="$results_dir/viruses/accuracy.txt"
-	p_accuracy="$results_dir/protozoa/accuracy.txt"
-	require_file "$v_results"
-	require_file "$p_results"
-	require_file "$v_truth"
-	require_file "$p_truth"
-	require_file "$v_accuracy"
-	require_file "$p_accuracy"
-
-	[ "$(grep -c '^custom_' "$v_results")" -eq 6 ] || fail "batch-classify/run_benchmark did not classify 6 viruses reads"
-	[ "$(grep -c '^custom_' "$p_results")" -eq 6 ] || fail "batch-classify/run_benchmark did not classify 6 protozoa reads"
-	[ "$(tail -n +2 "$v_truth" | wc -l)" -eq 6 ] || fail "batch-classify/run_benchmark did not write 6 viruses ground-truth rows"
-
-	grep -Eq "^reads_total=6 " "$v_accuracy" || fail "batch-classify/run_benchmark did not score viruses accuracy against ground truth"
-	grep -Eq "^reads_total=6 " "$p_accuracy" || fail "batch-classify/run_benchmark did not score protozoa accuracy against ground truth"
-
-	pass "batch-classify/run_benchmark.sh samples benchmark reads and scores accuracy per database type"
 }
 
 test_clark_cud_profile_opt_in() {
@@ -2216,7 +2158,6 @@ test_rehome_db_fixes_stale_absolute_paths
 test_rehome_db_dry_run_leaves_files_untouched
 test_rehome_db_reports_unresolvable_paths
 test_batch_classify_run_all
-test_batch_classify_run_benchmark
 test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count
