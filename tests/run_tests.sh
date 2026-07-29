@@ -1721,9 +1721,42 @@ test_rapl_energy_measures_package_domains() {
 	grep -Fq "pkg_joules=0.700000" "$out" || fail "rapl_energy.py did not sum only the package domains (expected 0.7 J): $(cat "$out")"
 	grep -Fq "pkg_joules_scaled=0.490000" "$out" || fail "rapl_energy.py did not apply the default 0.70 scale factor: $(cat "$out")"
 	grep -Fq "scale=0.70" "$out" || fail "rapl_energy.py did not report the scale factor used"
-	grep -Fq "domains=2" "$out" || fail "rapl_energy.py did not report exactly 2 package domains (core sub-domain should be excluded)"
+	grep -Fq "pkg_domains=2" "$out" || fail "rapl_energy.py did not report exactly 2 package domains (core sub-domain should be excluded)"
+	grep -Fq "dram_joules=0.000000" "$out" || fail "rapl_energy.py should report zero dram energy when no dram domain exists"
+	grep -Fq "dram_domains=0" "$out" || fail "rapl_energy.py should report zero dram domains when none exist"
+	grep -Fq "total_joules=0.700000" "$out" || fail "rapl_energy.py's total_joules should equal pkg_joules when there is no dram domain"
 
 	pass "rapl_energy.py sums package-only RAPL domains and reports raw + scaled-down energy"
+}
+
+test_rapl_energy_measures_dram_domain() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-energy-dram-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0" "$sysfs/intel-rapl:0:0" "$sysfs/intel-rapl:0:2"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	printf 'core\n' > "$sysfs/intel-rapl:0:0/name"
+	printf 'dram\n' > "$sysfs/intel-rapl:0:2/name"
+	printf '1000000\n' > "$sysfs/intel-rapl:0/energy_uj"
+	printf '500000\n' > "$sysfs/intel-rapl:0:0/energy_uj"
+	printf '300000\n' > "$sysfs/intel-rapl:0:2/energy_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0/max_energy_range_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0:2/max_energy_range_uj"
+
+	out="$tmp/stdout"
+	python3 "$REPO_DIR/scripts/rapl_energy.py" --sysfs-dir "$sysfs" -- bash -c "
+		printf '1300000\n' > '$sysfs/intel-rapl:0/energy_uj'
+		printf '350000\n' > '$sysfs/intel-rapl:0:2/energy_uj'
+	" > "$out" 2>/dev/null || fail "rapl_energy.py exited non-zero with a dram domain present"
+
+	grep -Fq "pkg_joules=0.300000" "$out" || fail "rapl_energy.py did not correctly measure package energy alongside dram: $(cat "$out")"
+	grep -Fq "dram_joules=0.050000" "$out" || fail "rapl_energy.py did not correctly measure the dram domain: $(cat "$out")"
+	grep -Fq "dram_domains=1" "$out" || fail "rapl_energy.py did not count the dram domain"
+	grep -Fq "total_joules=0.350000" "$out" || fail "rapl_energy.py's total_joules should be pkg_joules + dram_joules"
+	grep -Fq "total_joules_scaled=0.245000" "$out" || fail "rapl_energy.py did not scale total_joules by the default 0.70 factor"
+
+	pass "rapl_energy.py separately measures a dram RAPL domain when the platform exposes one"
 }
 
 test_rapl_energy_handles_counter_wraparound() {
@@ -2336,6 +2369,7 @@ test_rehome_db_reports_unresolvable_paths
 test_batch_classify_run_all
 test_batch_classify_run_all_gpu_flag
 test_rapl_energy_measures_package_domains
+test_rapl_energy_measures_dram_domain
 test_rapl_energy_handles_counter_wraparound
 test_rapl_energy_unavailable_still_runs_command
 test_batch_classify_run_all_energy_flag

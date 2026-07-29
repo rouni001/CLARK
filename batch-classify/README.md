@@ -66,23 +66,35 @@ from a checkout where this script's parent directory is the repo root.
 ### Energy (`-e`, RAPL)
 
 `-e` wraps the classify step with `scripts/rapl_energy.py`, which reads
-Intel RAPL's package-energy counters (`/sys/class/powercap/intel-rapl:*`,
-summing one `package-*` domain per CPU socket) before and after the run
-and prints:
+Intel RAPL's energy counters (`/sys/class/powercap/intel-rapl:*`) before
+and after the run and prints:
 
 ```
-ENERGY_PROFILE unit=joules pkg_joules=12.345678 pkg_joules_scaled=8.641975 scale=0.70 elapsed_s=1.234567 domains=1
+ENERGY_PROFILE unit=joules pkg_joules=12.345678 pkg_joules_scaled=8.641975 dram_joules=1.234567 dram_joules_scaled=0.864197 total_joules=13.580245 total_joules_scaled=9.506172 scale=0.70 elapsed_s=1.234567 pkg_domains=1 dram_domains=1
 ```
 
-This is the same MSR data Intel's PCM tool reports, just read directly
-from sysfs instead of via PCM/perf (no root or `msr` kernel module
-needed, as long as `energy_uj` is readable). RAPL package energy is
-**not** whole-system wall power -- it excludes the PSU, fans, disks, and
-(on most server/Xeon platforms) DRAM. There's no universal correction
-factor for that gap, so alongside the raw `pkg_joules` figure,
-`pkg_joules_scaled` reports the same value scaled down by a fixed 30%
-(`scale=0.70`) as a rough, clearly-labeled second estimate -- treat both
-as component-level numbers, not a measurement of true wall power.
+`pkg_joules` sums one `package-*` domain per CPU socket (their `core`/
+`uncore` sub-domains are already included in each package total and are
+not separately added, to avoid double-counting). `dram_joules` sums a
+separate `dram`-named RAPL domain if the platform exposes one -- most
+server/Xeon platforms do (as a package sub-domain or a sibling zone,
+depending on CPU generation and kernel version), most client CPUs don't.
+When no dram domain exists, `dram_joules=0.000000` and `dram_domains=0`
+are still printed explicitly (not omitted), so it's clear DRAM simply
+isn't measured on that machine rather than having consumed zero energy.
+`total_joules` is `pkg_joules + dram_joules`.
+
+This is the same MSR data Intel's PCM tool reports (`MSR_PKG_ENERGY_STATUS`
+/ `MSR_DRAM_ENERGY_STATUS`), just read directly from sysfs instead of via
+PCM/perf (no root or `msr` kernel module needed, as long as `energy_uj` is
+readable). None of these figures are whole-system ("wall") power --
+`pkg_joules` excludes the PSU, fans, disks, and DRAM (when DRAM is its own
+domain); `dram_joules` excludes DIMM voltage-regulator losses. There's no
+universal correction factor for either gap, so alongside each raw figure
+(and their sum), the `_scaled` counterparts report the same value scaled
+down by a fixed 30% (`scale=0.70`) as a rough, clearly-labeled second
+estimate -- treat all of these as component-level numbers, not a
+measurement of true wall power.
 
 If RAPL is unavailable or unreadable, `rapl_energy.py` prints a warning
 and still runs the classifier normally, just without an `ENERGY_PROFILE`
