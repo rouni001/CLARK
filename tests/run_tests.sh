@@ -1797,6 +1797,79 @@ test_rapl_energy_unavailable_still_runs_command() {
 	pass "rapl_energy.py falls back to running the command when RAPL is unreadable, with a warning"
 }
 
+test_rapl_energy_suggests_setup_script_on_permission_denied() {
+	if ! command -v setpriv >/dev/null 2>&1 || ! id nobody >/dev/null 2>&1; then
+		pass "rapl_energy.py permission-denied hint (skipped: setpriv or the nobody user is unavailable here)"
+		return
+	fi
+
+	# Deliberately outside the scratchpad/session tmp tree (which is itself
+	# root-only, 700) so the unprivileged "nobody" user used below can at
+	# least traverse down to the fixture directory; only the energy_uj file
+	# itself is locked to root, to isolate a genuine EACCES on that read.
+	tmp="$(mktemp -d "/tmp/clark-rapl-energy-permdenied-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+	chmod 755 "$tmp"
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0"
+	chmod 755 "$sysfs" "$sysfs/intel-rapl:0"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	chmod 644 "$sysfs/intel-rapl:0/name"
+	printf '12345\n' > "$sysfs/intel-rapl:0/energy_uj"
+	chmod 600 "$sysfs/intel-rapl:0/energy_uj"
+
+	err="$tmp/stderr"
+	setpriv --reuid nobody --regid nogroup --clear-groups \
+		python3 "$REPO_DIR/scripts/rapl_energy.py" --sysfs-dir "$sysfs" -- echo hi >/dev/null 2> "$err"
+
+	grep -Fq "permission denied" "$err" || fail "rapl_energy.py did not report a permission-denied read: $(cat "$err")"
+	grep -Fq "setup_rapl_permissions.sh" "$err" || fail "rapl_energy.py did not point at the one-time setup script for a permission-denied RAPL read: $(cat "$err")"
+
+	pass "rapl_energy.py points at setup_rapl_permissions.sh when RAPL energy_uj is permission-denied"
+}
+
+test_setup_rapl_permissions_dry_run() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-setup-dryrun-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	rule_file="$tmp/51-rapl-permissions.rules"
+	out="$tmp/stdout"
+	"$REPO_DIR/scripts/setup_rapl_permissions.sh" --dry-run --rule-file "$rule_file" > "$out" ||
+		fail "setup_rapl_permissions.sh --dry-run exited non-zero"
+
+	[ -e "$rule_file" ] && fail "setup_rapl_permissions.sh --dry-run should not write the rule file"
+	grep -Fq "intel-rapl" "$out" || fail "setup_rapl_permissions.sh --dry-run did not print the udev rule: $(cat "$out")"
+
+	pass "setup_rapl_permissions.sh --dry-run reports the planned change without writing anything"
+}
+
+test_setup_rapl_permissions_applies_fix() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-setup-apply-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	energy_file="$tmp/energy_uj"
+	printf '12345\n' > "$energy_file"
+	chmod 600 "$energy_file"
+	[ "$(stat -c '%a' "$energy_file")" = "600" ] || fail "test setup did not produce the expected starting mode"
+
+	rule_file="$tmp/51-rapl-permissions.rules"
+	RAPL_SETUP_SYSFS_GLOB="$energy_file" "$REPO_DIR/scripts/setup_rapl_permissions.sh" --rule-file "$rule_file" >/dev/null ||
+		fail "setup_rapl_permissions.sh exited non-zero"
+
+	require_file "$rule_file"
+	grep -Fq 'SUBSYSTEM=="powercap"' "$rule_file" || fail "setup_rapl_permissions.sh wrote a rule file without the expected udev match"
+	grep -Fq 'chmod -R a+r' "$rule_file" || fail "setup_rapl_permissions.sh's udev rule does not grant read access"
+
+	mode="$(stat -c '%a' "$energy_file")"
+	case "$mode" in
+		*4|*5|*6|*7) : ;;
+		*) fail "setup_rapl_permissions.sh did not make energy_uj world-readable (mode is $mode)" ;;
+	esac
+
+	pass "setup_rapl_permissions.sh writes the udev rule and makes existing RAPL files world-readable immediately"
+}
+
 test_batch_classify_run_all_energy_flag() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-energy-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -2576,6 +2649,9 @@ test_rapl_energy_measures_package_domains
 test_rapl_energy_measures_dram_domain
 test_rapl_energy_handles_counter_wraparound
 test_rapl_energy_unavailable_still_runs_command
+test_rapl_energy_suggests_setup_script_on_permission_denied
+test_setup_rapl_permissions_dry_run
+test_setup_rapl_permissions_applies_fix
 test_batch_classify_run_all_energy_flag
 test_nvml_energy_measures_gpu_via_counter
 test_nvml_energy_restricts_to_requested_devices

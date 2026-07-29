@@ -101,6 +101,24 @@ and still runs the classifier normally, just without an `ENERGY_PROFILE`
 line -- `-e` never blocks a run. `RAPL_SYSFS_DIR` (env var) overrides the
 `/sys/class/powercap` path if yours is mounted elsewhere.
 
+#### One-time setup: reading RAPL without sudo every run
+
+Since a kernel fix for CVE-2020-8694 (a RAPL-based power side-channel
+attack), most distro kernels ship `energy_uj` readable by root only, so
+`-e` would need `sudo batch-classify/run_all.sh ... -e` every single
+time. Fix this once instead:
+
+```sh
+sudo scripts/setup_rapl_permissions.sh
+```
+
+This installs a udev rule (`/etc/udev/rules.d/51-rapl-permissions.rules`)
+that makes `energy_uj` world-readable every time the RAPL devices are
+enumerated (so it survives reboots), and immediately `chmod a+r`'s
+whatever RAPL devices already exist on the current boot -- so `-e` works
+without sudo from then on, including in this same session. Use
+`--dry-run` to see what it would do first.
+
 #### GPU energy (`-e -g`, NVML)
 
 A GPU run still needs the host CPU (driving cuCLARK, staging data, I/O),

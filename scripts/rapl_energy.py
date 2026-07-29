@@ -75,16 +75,20 @@ def read_int(path):
 
 
 def discover_domains(sysfs_dir):
-    """Return {"package": [...], "dram": [...]}, each a list of
-    (name, energy_uj_path, max_energy_range_uj_or_None) tuples, by
-    scanning every intel-rapl:* entry (top-level or nested subdomain)
-    under sysfs_dir and classifying it by its "name" file."""
+    """Return ({"package": [...], "dram": [...]}, saw_permission_error).
+    Each list holds (name, energy_uj_path, max_energy_range_uj_or_None)
+    tuples, found by scanning every intel-rapl:* entry (top-level or
+    nested subdomain) under sysfs_dir and classifying it by its "name"
+    file. saw_permission_error is True if any energy_uj read failed
+    specifically with a permission error, so the caller can point at the
+    one-time fix instead of a generic warning."""
     domains = {"package": [], "dram": []}
+    saw_permission_error = False
     try:
         entries = sorted(os.listdir(sysfs_dir))
     except OSError as exc:
         print("Warning: RAPL energy accounting unavailable: cannot list %s (%s)" % (sysfs_dir, exc), file=sys.stderr)
-        return domains
+        return domains, saw_permission_error
 
     for entry in entries:
         if not DOMAIN_DIR_RE.match(entry):
@@ -109,6 +113,10 @@ def discover_domains(sysfs_dir):
 
         try:
             read_int(energy_path)
+        except PermissionError as exc:
+            print("Warning: RAPL domain %s (%s): permission denied reading energy_uj (%s), skipping" % (entry, name, exc), file=sys.stderr)
+            saw_permission_error = True
+            continue
         except OSError as exc:
             print("Warning: RAPL domain %s (%s): cannot read energy_uj (%s), skipping" % (entry, name, exc), file=sys.stderr)
             continue
@@ -118,7 +126,7 @@ def discover_domains(sysfs_dir):
         except OSError:
             pass
         domains[group].append((name, energy_path, max_range))
-    return domains
+    return domains, saw_permission_error
 
 
 def read_total_uj(domains):
@@ -145,13 +153,21 @@ def delta_with_wraparound(before, after, domains):
 def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
 
-    domains = discover_domains(args.sysfs_dir)
+    domains, saw_permission_error = discover_domains(args.sysfs_dir)
     pkg_domains = domains["package"]
     dram_domains = domains["dram"]
     all_domains = pkg_domains + dram_domains
 
     if not pkg_domains:
-        print("Warning: no readable RAPL package domains found under %s; running without energy measurement." % args.sysfs_dir, file=sys.stderr)
+        if saw_permission_error:
+            print(
+                "Warning: RAPL package domains under %s exist but aren't readable (permission denied). "
+                "Run scripts/setup_rapl_permissions.sh once (with sudo) to fix this for good; "
+                "running without energy measurement for now." % args.sysfs_dir,
+                file=sys.stderr,
+            )
+        else:
+            print("Warning: no readable RAPL package domains found under %s; running without energy measurement." % args.sysfs_dir, file=sys.stderr)
         return subprocess.call(args.command)
 
     before = read_total_uj(all_domains)
