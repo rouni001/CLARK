@@ -18,6 +18,7 @@ script_dir() {
 }
 
 SCRIPT_DIR="$(script_dir)"
+PYTHON_CMD="${CLARK_PYTHON:-python3}"
 
 # Path to the cuCLARK GPU executable, used when -g/--gpu is passed.
 # Defaults to a file named "cuCLARK" sitting right next to this script
@@ -47,6 +48,12 @@ Options:
               match/write time, plus match/hits-update/classify timing)
               by setting CLARK_CUD_PROFILE=1 and CLARK_CUD_PROFILE_FINE=1
               for the run. CPU (CLARK) only; ignored with -g. (default: off)
+  -e          Measure CPU package energy (RAPL) for the run via
+              scripts/rapl_energy.py, printing an ENERGY_PROFILE line
+              (raw joules + a 30%-scaled-down figure, since RAPL package
+              energy isn't whole-system wall power). Requires readable
+              /sys/class/powercap/intel-rapl:*; falls back to running
+              without it (with a warning) otherwise. (default: off)
   -g          Run on GPU with cuCLARK instead of CPU CLARK. Looks for
               batch-classify/cuCLARK by default; set CUCLARK_EXE (env var,
               or edit the top of this script) if yours lives elsewhere.
@@ -93,6 +100,7 @@ SAMPLE_COUNT=20
 SAMPLE_LEN=150
 KMER=31
 PROFILE=0
+ENERGY=0
 GPU=0
 VARIANT_EXE="CLARK"
 RANK_FLAG="--species"
@@ -141,6 +149,10 @@ while [ "$#" -gt 0 ]; do
 			;;
 		-p)
 			PROFILE=1
+			shift
+			;;
+		-e)
+			ENERGY=1
 			shift
 			;;
 		-g)
@@ -220,7 +232,13 @@ for type in "${TYPES[@]}"; do
 
 	"$LDIR/scripts/make_sample.sh" -n "$SAMPLE_COUNT" -l "$SAMPLE_LEN" -o "$objects" -T "$targets"
 
-	env "${PROFILE_ENV[@]}" "$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
+	if [ "$ENERGY" -eq 1 ]; then
+		env "${PROFILE_ENV[@]}" "$PYTHON_CMD" "$LDIR/scripts/rapl_energy.py" \
+			--sysfs-dir "${RAPL_SYSFS_DIR:-/sys/class/powercap}" -- \
+			"$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
+	else
+		env "${PROFILE_ENV[@]}" "$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
+	fi
 
 	echo "-- $type done: $results.csv"
 done

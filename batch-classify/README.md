@@ -52,6 +52,7 @@ Results land in `batch-classify/results/<type>/objects.fa` and
 | `-l <n>`     | `150`     | sampled read length                        |
 | `-k <n>`     | `31`      | k-mer size (`-k`)                          |
 | `-p`         | off       | set `CLARK_CUD_PROFILE=1` and `CLARK_CUD_PROFILE_FINE=1` for the run, printing CLARK's opt-in performance breakdown (build/load/match/write time, plus match/hits-update/classify sub-timings). CPU only; ignored with `-g`. |
+| `-e`         | off       | measure CPU package energy (RAPL) for the run via `scripts/rapl_energy.py`, printing an `ENERGY_PROFILE` line. |
 | `-g`         | off       | run on GPU with cuCLARK instead of CPU CLARK. Overrides `-x`. |
 | `-x <name>`  | `CLARK`   | CPU executable variant (`CLARK`, `CLARK-l`, `CLARK-S`). Ignored if `-g` is set. |
 | `-r <flag>`  | `--species` | taxonomy rank flag for `set_targets.sh`  |
@@ -61,6 +62,32 @@ Run `batch-classify/run_all.sh -h` for the full usage message.
 
 `CLARK_HOME` (env var) overrides the repository root if you're not running
 from a checkout where this script's parent directory is the repo root.
+
+### Energy (`-e`, RAPL)
+
+`-e` wraps the classify step with `scripts/rapl_energy.py`, which reads
+Intel RAPL's package-energy counters (`/sys/class/powercap/intel-rapl:*`,
+summing one `package-*` domain per CPU socket) before and after the run
+and prints:
+
+```
+ENERGY_PROFILE unit=joules pkg_joules=12.345678 pkg_joules_scaled=8.641975 scale=0.70 elapsed_s=1.234567 domains=1
+```
+
+This is the same MSR data Intel's PCM tool reports, just read directly
+from sysfs instead of via PCM/perf (no root or `msr` kernel module
+needed, as long as `energy_uj` is readable). RAPL package energy is
+**not** whole-system wall power -- it excludes the PSU, fans, disks, and
+(on most server/Xeon platforms) DRAM. There's no universal correction
+factor for that gap, so alongside the raw `pkg_joules` figure,
+`pkg_joules_scaled` reports the same value scaled down by a fixed 30%
+(`scale=0.70`) as a rough, clearly-labeled second estimate -- treat both
+as component-level numbers, not a measurement of true wall power.
+
+If RAPL is unavailable or unreadable, `rapl_energy.py` prints a warning
+and still runs the classifier normally, just without an `ENERGY_PROFILE`
+line -- `-e` never blocks a run. `RAPL_SYSFS_DIR` (env var) overrides the
+`/sys/class/powercap` path if yours is mounted elsewhere.
 
 ### GPU (cuCLARK)
 

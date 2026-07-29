@@ -1692,6 +1692,124 @@ test_batch_classify_run_all() {
 	pass "batch-classify/run_all.sh classifies multiple database types sharing one directory"
 }
 
+test_rapl_energy_measures_package_domains() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-energy-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0" "$sysfs/intel-rapl:0:0" "$sysfs/intel-rapl:1"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	printf 'core\n' > "$sysfs/intel-rapl:0:0/name"
+	printf 'package-1\n' > "$sysfs/intel-rapl:1/name"
+	printf '1000000\n' > "$sysfs/intel-rapl:0/energy_uj"
+	printf '500000\n' > "$sysfs/intel-rapl:0:0/energy_uj"
+	printf '2000000\n' > "$sysfs/intel-rapl:1/energy_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0/max_energy_range_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:1/max_energy_range_uj"
+
+	# The wrapped command bumps both package counters (+300000 and +400000
+	# uJ) but also the "core" sub-domain (+900000 uJ), which must NOT be
+	# double-counted since it is already included in package-0's own total.
+	out="$tmp/stdout"
+	err="$tmp/stderr"
+	python3 "$REPO_DIR/scripts/rapl_energy.py" --sysfs-dir "$sysfs" -- bash -c "
+		printf '1300000\n' > '$sysfs/intel-rapl:0/energy_uj'
+		printf '1400000\n' > '$sysfs/intel-rapl:0:0/energy_uj'
+		printf '2400000\n' > '$sysfs/intel-rapl:1/energy_uj'
+	" > "$out" 2> "$err" || fail "rapl_energy.py exited non-zero: $(cat "$err")"
+
+	grep -Fq "pkg_joules=0.700000" "$out" || fail "rapl_energy.py did not sum only the package domains (expected 0.7 J): $(cat "$out")"
+	grep -Fq "pkg_joules_scaled=0.490000" "$out" || fail "rapl_energy.py did not apply the default 0.70 scale factor: $(cat "$out")"
+	grep -Fq "scale=0.70" "$out" || fail "rapl_energy.py did not report the scale factor used"
+	grep -Fq "domains=2" "$out" || fail "rapl_energy.py did not report exactly 2 package domains (core sub-domain should be excluded)"
+
+	pass "rapl_energy.py sums package-only RAPL domains and reports raw + scaled-down energy"
+}
+
+test_rapl_energy_handles_counter_wraparound() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-energy-wrap-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	printf '99000000\n' > "$sysfs/intel-rapl:0/energy_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0/max_energy_range_uj"
+
+	out="$tmp/stdout"
+	python3 "$REPO_DIR/scripts/rapl_energy.py" --sysfs-dir "$sysfs" -- bash -c "
+		printf '500000\n' > '$sysfs/intel-rapl:0/energy_uj'
+	" > "$out" 2>/dev/null || fail "rapl_energy.py exited non-zero on a wrapping counter"
+
+	# (100000000 - 99000000) + 500000 = 1500000 uJ = 1.5 J
+	grep -Fq "pkg_joules=1.500000" "$out" || fail "rapl_energy.py did not correctly account for counter wraparound: $(cat "$out")"
+
+	pass "rapl_energy.py accounts for RAPL counter wraparound using max_energy_range_uj"
+}
+
+test_rapl_energy_unavailable_still_runs_command() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-rapl-energy-unavailable-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	out="$tmp/stdout"
+	err="$tmp/stderr"
+	python3 "$REPO_DIR/scripts/rapl_energy.py" --sysfs-dir "$tmp/does-not-exist" -- echo hello > "$out" 2> "$err"
+	rc=$?
+
+	[ "$rc" -eq 0 ] || fail "rapl_energy.py should propagate the wrapped command's exit code (echo exits 0)"
+	grep -Fq "hello" "$out" || fail "rapl_energy.py did not run the wrapped command when RAPL is unavailable"
+	grep -Fq "ENERGY_PROFILE" "$out" && fail "rapl_energy.py printed an ENERGY_PROFILE line despite RAPL being unavailable"
+	grep -Fiq "unavailable" "$err" || fail "rapl_energy.py did not warn that RAPL energy accounting is unavailable"
+
+	pass "rapl_energy.py falls back to running the command when RAPL is unreadable, with a warning"
+}
+
+test_batch_classify_run_all_energy_flag() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-energy-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/taxonomy" "$fake_home/exe"
+	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
+	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+	ln -s "$REPO_DIR/exe/CLARK-l" "$fake_home/exe/CLARK-l"
+
+	genome="$dbdir/Viruses/GCF_700000006.1_VirusR_genomic.fna"
+	{
+		printf '>NC_700000006.1 Virus R\n'
+		python3 -c "import random; random.seed(51); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome"
+	printf '%s\n' "$genome" > "$dbdir/.viruses"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'viruses\tviral\tGCF_700000006.1\t700006\t700006\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000006.1_VirusR/GCF_700000006.1_VirusR_genomic.fna.gz\n'
+	} > "$dbdir/.viruses.provenance.tsv"
+	printf '700006 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	printf '0\n' > "$sysfs/intel-rapl:0/energy_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0/max_energy_range_uj"
+
+	results_dir="$tmp/results"
+	CLARK_HOME="$fake_home" RAPL_SYSFS_DIR="$sysfs" \
+		"$REPO_DIR/batch-classify/run_all.sh" -d "$dbdir" -t viruses -x CLARK-l -n 2 -c 6 -l 100 \
+			-o "$results_dir" -e > "$tmp/stdout" 2> "$tmp/stderr" ||
+		fail "batch-classify/run_all.sh -e exited non-zero: $(cat "$tmp/stderr")"
+
+	grep -Fq "ENERGY_PROFILE" "$tmp/stdout" || fail "batch-classify/run_all.sh -e did not print an ENERGY_PROFILE line: $(cat "$tmp/stdout")"
+	require_file "$results_dir/viruses/results.csv"
+
+	pass "batch-classify/run_all.sh -e wraps the classify step with RAPL energy measurement"
+}
+
 test_batch_classify_run_all_gpu_flag() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-gpu-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -2217,6 +2335,10 @@ test_rehome_db_dry_run_leaves_files_untouched
 test_rehome_db_reports_unresolvable_paths
 test_batch_classify_run_all
 test_batch_classify_run_all_gpu_flag
+test_rapl_energy_measures_package_domains
+test_rapl_energy_handles_counter_wraparound
+test_rapl_energy_unavailable_still_runs_command
+test_batch_classify_run_all_energy_flag
 test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count
