@@ -53,7 +53,10 @@ Options:
               (raw joules + a 30%-scaled-down figure, since RAPL package
               energy isn't whole-system wall power). Requires readable
               /sys/class/powercap/intel-rapl:*; falls back to running
-              without it (with a warning) otherwise. (default: off)
+              without it (with a warning) otherwise. Combined with -g,
+              also measures GPU energy via scripts/nvml_energy.py
+              (ENERGY_PROFILE_GPU line) over the same run, since a GPU
+              run still needs the host CPU. (default: off)
   -g          Run on GPU with cuCLARK instead of CPU CLARK. Looks for
               batch-classify/cuCLARK by default; set CUCLARK_EXE (env var,
               or edit the top of this script) if yours lives elsewhere.
@@ -232,13 +235,21 @@ for type in "${TYPES[@]}"; do
 
 	"$LDIR/scripts/make_sample.sh" -n "$SAMPLE_COUNT" -l "$SAMPLE_LEN" -o "$objects" -T "$targets"
 
-	if [ "$ENERGY" -eq 1 ]; then
-		env "${PROFILE_ENV[@]}" "$PYTHON_CMD" "$LDIR/scripts/rapl_energy.py" \
-			--sysfs-dir "${RAPL_SYSFS_DIR:-/sys/class/powercap}" -- \
-			"$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
-	else
-		env "${PROFILE_ENV[@]}" "$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS"
+	# Build the command to run, wrapping innermost-first so each energy
+	# wrapper's before/after reading spans the exact same execution window
+	# as the ones nested inside it: RAPL(NVML(classify)) when both -e and
+	# -g are set, so CPU and GPU energy are measured over the identical run
+	# rather than two separate invocations.
+	CLASSIFY_CMD=("$CLASSIFY_EXE" -k "$KMER" -T "$targets" -D "$dbd" -O "$objects" -R "$results" -n "$THREADS")
+
+	if [ "$ENERGY" -eq 1 ] && [ "$GPU" -eq 1 ]; then
+		CLASSIFY_CMD=("$PYTHON_CMD" "$LDIR/scripts/nvml_energy.py" -- "${CLASSIFY_CMD[@]}")
 	fi
+	if [ "$ENERGY" -eq 1 ]; then
+		CLASSIFY_CMD=("$PYTHON_CMD" "$LDIR/scripts/rapl_energy.py" --sysfs-dir "${RAPL_SYSFS_DIR:-/sys/class/powercap}" -- "${CLASSIFY_CMD[@]}")
+	fi
+
+	env "${PROFILE_ENV[@]}" "${CLASSIFY_CMD[@]}"
 
 	echo "-- $type done: $results.csv"
 done

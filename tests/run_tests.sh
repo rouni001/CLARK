@@ -1843,6 +1843,210 @@ test_batch_classify_run_all_energy_flag() {
 	pass "batch-classify/run_all.sh -e wraps the classify step with RAPL energy measurement"
 }
 
+write_fake_pynvml() {
+	# $1 = directory to write pynvml.py into (added to PYTHONPATH by the
+	# caller); $2 = path to a JSON state file the fake module reads on every
+	# call, so both the wrapper (via NVML calls) and the wrapped child
+	# command (by overwriting the file) can coordinate through the
+	# filesystem across process boundaries, exactly like the fake RAPL
+	# sysfs fixtures do for rapl_energy.py.
+	cat > "$1/pynvml.py" <<'PYEOF'
+import json
+import os
+
+class NVMLError(Exception):
+    pass
+
+_STATE_FILE = os.environ["FAKE_NVML_STATE_FILE"]
+
+def _state():
+    with open(_STATE_FILE) as f:
+        return json.load(f)
+
+def nvmlInit():
+    pass
+
+def nvmlShutdown():
+    pass
+
+def nvmlDeviceGetCount():
+    return len(_state()["devices"])
+
+def nvmlDeviceGetHandleByIndex(i):
+    return i
+
+def nvmlDeviceGetTotalEnergyConsumption(handle):
+    dev = _state()["devices"][handle]
+    if not dev.get("counter_supported", True):
+        raise NVMLError("not supported")
+    return dev["total_energy_mj"]
+
+def nvmlDeviceGetPowerUsage(handle):
+    return _state()["devices"][handle]["power_mw"]
+PYEOF
+}
+
+test_nvml_energy_measures_gpu_via_counter() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-nvml-energy-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	write_fake_pynvml "$tmp"
+	state="$tmp/state.json"
+	printf '{"devices": [{"total_energy_mj": 100000, "counter_supported": true, "power_mw": 0}]}' > "$state"
+
+	out="$tmp/stdout"
+	PYTHONPATH="$tmp" FAKE_NVML_STATE_FILE="$state" \
+		python3 "$REPO_DIR/scripts/nvml_energy.py" -- bash -c "
+			printf '%s' '{\"devices\": [{\"total_energy_mj\": 145000, \"counter_supported\": true, \"power_mw\": 0}]}' > '$state'
+		" > "$out" || fail "nvml_energy.py exited non-zero"
+
+	grep -Fq "gpu_joules=45.000000" "$out" || fail "nvml_energy.py did not correctly read the NVML total-energy counter: $(cat "$out")"
+	grep -Fq "gpu_joules_scaled=31.500000" "$out" || fail "nvml_energy.py did not apply the default 0.70 scale factor: $(cat "$out")"
+	grep -Fq "method=counter" "$out" || fail "nvml_energy.py should report method=counter when the total-energy counter is supported"
+	grep -Fq "devices=1" "$out" || fail "nvml_energy.py did not report 1 device measured"
+
+	pass "nvml_energy.py measures GPU energy via NVML's total-energy counter"
+}
+
+test_nvml_energy_restricts_to_requested_devices() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-nvml-energy-devices-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	write_fake_pynvml "$tmp"
+	state="$tmp/state.json"
+	printf '{"devices": [{"total_energy_mj": 100000, "counter_supported": true, "power_mw": 0}, {"total_energy_mj": 500000, "counter_supported": true, "power_mw": 0}]}' > "$state"
+
+	out="$tmp/stdout"
+	PYTHONPATH="$tmp" FAKE_NVML_STATE_FILE="$state" \
+		python3 "$REPO_DIR/scripts/nvml_energy.py" --devices 0 -- bash -c "
+			printf '%s' '{\"devices\": [{\"total_energy_mj\": 120000, \"counter_supported\": true, \"power_mw\": 0}, {\"total_energy_mj\": 560000, \"counter_supported\": true, \"power_mw\": 0}]}' > '$state'
+		" > "$out" || fail "nvml_energy.py --devices 0 exited non-zero"
+
+	grep -Fq "gpu_joules=20.000000" "$out" || fail "nvml_energy.py --devices 0 should only count device 0's 20000 mJ delta, not device 1's: $(cat "$out")"
+	grep -Fq "devices=1" "$out" || fail "nvml_energy.py --devices 0 should report exactly 1 device measured"
+
+	pass "nvml_energy.py --devices restricts measurement to the requested NVML device indices"
+}
+
+test_nvml_energy_falls_back_to_power_sampling() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-nvml-energy-sampling-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	write_fake_pynvml "$tmp"
+	state="$tmp/state.json"
+	# counter_supported=false forces the power-sampling fallback; a
+	# constant 100000 mW (100 W) draw for ~0.3s should integrate to
+	# roughly 30 J -- allow a generous tolerance since it's a real-time
+	# sampling loop, not a deterministic counter read.
+	printf '{"devices": [{"total_energy_mj": 0, "counter_supported": false, "power_mw": 100000}]}' > "$state"
+
+	out="$tmp/stdout"
+	PYTHONPATH="$tmp" FAKE_NVML_STATE_FILE="$state" \
+		python3 "$REPO_DIR/scripts/nvml_energy.py" --sample-interval 0.02 -- sleep 0.3 > "$out" ||
+		fail "nvml_energy.py sampling fallback exited non-zero"
+
+	grep -Fq "method=sampling" "$out" || fail "nvml_energy.py should report method=sampling when the total-energy counter is unsupported"
+	joules="$(grep -oE 'gpu_joules=[0-9.]+' "$out" | cut -d= -f2)"
+	[ -n "$joules" ] || fail "nvml_energy.py did not report gpu_joules for the sampling fallback: $(cat "$out")"
+	python3 -c "
+import sys
+joules = float('$joules')
+if not (20.0 <= joules <= 40.0):
+    sys.exit('sampled energy %.3f J is outside the expected ~30 J range for 100 W over ~0.3 s' % joules)
+" || fail "nvml_energy.py's power-sampling estimate was implausible"
+
+	pass "nvml_energy.py falls back to integrating sampled power when the total-energy counter is unsupported"
+}
+
+test_nvml_energy_unavailable_still_runs_command() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-nvml-energy-unavailable-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	out="$tmp/stdout"
+	err="$tmp/stderr"
+	# No PYTHONPATH override -- pynvml genuinely isn't installed here, so
+	# this exercises the real "GPU tooling unavailable" path.
+	python3 "$REPO_DIR/scripts/nvml_energy.py" -- echo hello > "$out" 2> "$err"
+	rc=$?
+
+	[ "$rc" -eq 0 ] || fail "nvml_energy.py should propagate the wrapped command's exit code"
+	grep -Fq "hello" "$out" || fail "nvml_energy.py did not run the wrapped command when NVML/pynvml is unavailable"
+	grep -Fq "ENERGY_PROFILE_GPU" "$out" && fail "nvml_energy.py printed an ENERGY_PROFILE_GPU line despite NVML being unavailable"
+	grep -Eiq "unavailable|not installed" "$err" || fail "nvml_energy.py did not warn that GPU energy accounting is unavailable"
+
+	pass "nvml_energy.py falls back to running the command when pynvml/NVML is unavailable, with a warning"
+}
+
+test_batch_classify_run_all_combines_cpu_and_gpu_energy() {
+	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-energy-gpu-test.XXXXXX")"
+	trap 'rm -rf "$tmp"' RETURN
+
+	fake_home="$tmp/fake-home"
+	dbdir="$tmp/db"
+	mkdir -p "$fake_home" "$dbdir/Viruses" "$dbdir/taxonomy" "$fake_home/exe"
+	ln -s "$REPO_DIR/scripts" "$fake_home/scripts"
+	ln -s "$REPO_DIR/batch-classify" "$fake_home/batch-classify"
+	for binary in getTargetsDef getfilesToTaxNodes getAccssnTaxID; do
+		ln -s "$REPO_DIR/exe/$binary" "$fake_home/exe/$binary"
+	done
+
+	genome="$dbdir/Viruses/GCF_700000007.1_VirusS_genomic.fna"
+	{
+		printf '>NC_700000007.1 Virus S\n'
+		python3 -c "import random; random.seed(61); print(''.join(random.choice('ACGT') for _ in range(3000)))"
+	} > "$genome"
+	printf '%s\n' "$genome" > "$dbdir/.viruses"
+	{
+		printf 'database\tsource\taccession\ttaxid\tspecies_taxid\tseq_rel_date\tassembly_level\tversion_status\turl\n'
+		printf 'viruses\tviral\tGCF_700000007.1\t700007\t700007\t2026-01-01\tComplete Genome\tlatest\thttps://example.org/refseq/GCF_700000007.1_VirusS/GCF_700000007.1_VirusS_genomic.fna.gz\n'
+	} > "$dbdir/.viruses.provenance.tsv"
+	printf '700007 | 2 | species |\n2 | 1 | superkingdom |\n' > "$dbdir/taxonomy/nodes.dmp"
+	printf '1 | 1 |\n' > "$dbdir/taxonomy/merged.dmp"
+	touch "$dbdir/.taxondata"
+
+	sysfs="$tmp/powercap"
+	mkdir -p "$sysfs/intel-rapl:0"
+	printf 'package-0\n' > "$sysfs/intel-rapl:0/name"
+	printf '0\n' > "$sysfs/intel-rapl:0/energy_uj"
+	printf '100000000\n' > "$sysfs/intel-rapl:0/max_energy_range_uj"
+
+	write_fake_pynvml "$tmp"
+	state="$tmp/nvml_state.json"
+	printf '{"devices": [{"total_energy_mj": 0, "counter_supported": true, "power_mw": 0}]}' > "$state"
+
+	# Stand in for cuCLARK: bump both the fake RAPL sysfs and fake NVML
+	# state so both wrappers observe a nonzero delta over the same run.
+	fake_cuclark="$tmp/cuCLARK"
+	cat > "$fake_cuclark" <<EOF
+#!/usr/bin/env bash
+printf '1000000\n' > "$sysfs/intel-rapl:0/energy_uj"
+printf '%s' '{"devices": [{"total_energy_mj": 50000, "counter_supported": true, "power_mw": 0}]}' > "$state"
+results=""
+while [ "\$#" -gt 0 ]; do
+	if [ "\$1" = "-R" ]; then
+		results="\$2"
+	fi
+	shift
+done
+[ -n "\$results" ] && printf 'Object_ID, Length, Assignment\n' > "\$results.csv"
+EOF
+	chmod +x "$fake_cuclark"
+
+	results_dir="$tmp/results"
+	CLARK_HOME="$fake_home" RAPL_SYSFS_DIR="$sysfs" CUCLARK_EXE="$fake_cuclark" \
+	PYTHONPATH="$tmp" FAKE_NVML_STATE_FILE="$state" \
+		"$REPO_DIR/batch-classify/run_all.sh" -d "$dbdir" -t viruses -g -e -n 2 -c 3 -l 80 \
+			-o "$results_dir" > "$tmp/stdout" 2> "$tmp/stderr" ||
+		fail "batch-classify/run_all.sh -e -g exited non-zero: $(cat "$tmp/stderr")"
+
+	grep -Fq "ENERGY_PROFILE unit=joules" "$tmp/stdout" || fail "batch-classify/run_all.sh -e -g did not print a CPU ENERGY_PROFILE line: $(cat "$tmp/stdout")"
+	grep -Fq "ENERGY_PROFILE_GPU" "$tmp/stdout" || fail "batch-classify/run_all.sh -e -g did not print a GPU ENERGY_PROFILE_GPU line: $(cat "$tmp/stdout")"
+	grep -Fq "pkg_joules=1.000000" "$tmp/stdout" || fail "batch-classify/run_all.sh -e -g did not report the expected CPU energy delta: $(cat "$tmp/stdout")"
+	grep -Fq "gpu_joules=50.000000" "$tmp/stdout" || fail "batch-classify/run_all.sh -e -g did not report the expected GPU energy delta: $(cat "$tmp/stdout")"
+
+	pass "batch-classify/run_all.sh -e -g measures CPU (RAPL) and GPU (NVML) energy together over the same run"
+}
+
 test_batch_classify_run_all_gpu_flag() {
 	tmp="$(mktemp -d "${TMPDIR:-/tmp}/clark-batch-classify-gpu-test.XXXXXX")"
 	trap 'rm -rf "$tmp"' RETURN
@@ -2373,6 +2577,11 @@ test_rapl_energy_measures_dram_domain
 test_rapl_energy_handles_counter_wraparound
 test_rapl_energy_unavailable_still_runs_command
 test_batch_classify_run_all_energy_flag
+test_nvml_energy_measures_gpu_via_counter
+test_nvml_energy_restricts_to_requested_devices
+test_nvml_energy_falls_back_to_power_sampling
+test_nvml_energy_unavailable_still_runs_command
+test_batch_classify_run_all_combines_cpu_and_gpu_energy
 test_clark_cud_profile_opt_in
 test_get_targets_def_smoke
 test_get_targets_def_exit_code_ignores_excluded_count

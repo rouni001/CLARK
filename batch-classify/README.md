@@ -52,7 +52,7 @@ Results land in `batch-classify/results/<type>/objects.fa` and
 | `-l <n>`     | `150`     | sampled read length                        |
 | `-k <n>`     | `31`      | k-mer size (`-k`)                          |
 | `-p`         | off       | set `CLARK_CUD_PROFILE=1` and `CLARK_CUD_PROFILE_FINE=1` for the run, printing CLARK's opt-in performance breakdown (build/load/match/write time, plus match/hits-update/classify sub-timings). CPU only; ignored with `-g`. |
-| `-e`         | off       | measure CPU package energy (RAPL) for the run via `scripts/rapl_energy.py`, printing an `ENERGY_PROFILE` line. |
+| `-e`         | off       | measure CPU package energy (RAPL) for the run via `scripts/rapl_energy.py`, printing an `ENERGY_PROFILE` line. Combined with `-g`, also measures GPU energy (NVML) via `scripts/nvml_energy.py`, printing an `ENERGY_PROFILE_GPU` line too. |
 | `-g`         | off       | run on GPU with cuCLARK instead of CPU CLARK. Overrides `-x`. |
 | `-x <name>`  | `CLARK`   | CPU executable variant (`CLARK`, `CLARK-l`, `CLARK-S`). Ignored if `-g` is set. |
 | `-r <flag>`  | `--species` | taxonomy rank flag for `set_targets.sh`  |
@@ -100,6 +100,38 @@ If RAPL is unavailable or unreadable, `rapl_energy.py` prints a warning
 and still runs the classifier normally, just without an `ENERGY_PROFILE`
 line -- `-e` never blocks a run. `RAPL_SYSFS_DIR` (env var) overrides the
 `/sys/class/powercap` path if yours is mounted elsewhere.
+
+#### GPU energy (`-e -g`, NVML)
+
+A GPU run still needs the host CPU (driving cuCLARK, staging data, I/O),
+so when `-e` and `-g` are combined, `run_all.sh` measures *both*: it wraps
+the classify step as `rapl_energy.py( nvml_energy.py( cuCLARK ... ) )`, so
+CPU (RAPL) and GPU (NVML) energy are measured over the exact same
+execution window, not two separate runs. You get both lines:
+
+```
+ENERGY_PROFILE unit=joules pkg_joules=... ... total_joules=... total_joules_scaled=...
+ENERGY_PROFILE_GPU unit=joules gpu_joules=12.345678 gpu_joules_scaled=8.641975 scale=0.70 elapsed_s=1.234567 devices=1 method=counter
+```
+
+Add `pkg_joules` (or `total_joules` if DRAM is tracked) and `gpu_joules`
+together for the combined CPU+GPU energy of the run; `scripts/nvml_energy.py`
+doesn't do this addition itself since it has no knowledge of the RAPL side
+(each script is independently usable on its own).
+
+`nvml_energy.py` needs no changes to cuCLARK's source -- it wraps the
+process from the outside via `pynvml` (`pip install nvidia-ml-py`),
+exactly like `rapl_energy.py` does for RAPL. It reads
+`nvmlDeviceGetTotalEnergyConsumption()`, a cumulative counter most modern
+(Volta+) NVIDIA GPUs support directly (`method=counter`); if a GPU/driver
+doesn't support it, it falls back to sampling instantaneous power draw
+and integrating it over time (`method=sampling`), which is inherently
+approximate -- prefer the counter method wherever available. By default
+every GPU NVML finds is measured; pass `--devices 0,1` (only when invoking
+`scripts/nvml_energy.py` directly, not exposed as a `run_all.sh` flag) to
+restrict it to specific NVML device indices. If `pynvml` isn't installed
+or NVML can't be initialized, it warns and still runs the classifier
+normally, just without an `ENERGY_PROFILE_GPU` line.
 
 ### GPU (cuCLARK)
 
