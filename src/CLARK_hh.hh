@@ -206,6 +206,12 @@ class CLARK
 		std::vector<uint64_t>			m_hitsCalls;
 		std::vector<uint64_t>			m_classifyCalls;
 
+		// CuD profiling: total k-mer (hash-table) lookups issued, opt-in via
+		// CLARK_CUD_PROFILE=1 (cheap per-lookup counter increment, no timer
+		// read -- unlike the RDTSC-based fine profiling above).
+		bool					m_profile;
+		std::vector<uint64_t>			m_queryCount;
+
 	public:
 		CLARK(const size_t& 			_kmerLength,
 				const char* 		_filesName,
@@ -516,6 +522,9 @@ CLARK<HKMERr>::CLARK(const size_t& 	_kmerLength,
 	m_matchCalls.assign(m_nbCPU, 0);
 	m_hitsCalls.assign(m_nbCPU, 0);
 	m_classifyCalls.assign(m_nbCPU, 0);
+
+	m_profile = getenv("CLARK_CUD_PROFILE") != NULL;
+	m_queryCount.assign(m_nbCPU, 0);
 }
 
 	template <typename HKMERr>
@@ -1695,6 +1704,7 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 
 							// Query to HashTable (Thread-safe)
 							if (m_fineProfile) { cudT0 = cudRdtsc(); }
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_f, h))
 							{
 								if (m_fineProfile)
@@ -1739,6 +1749,7 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 							_isfull = true;
 							// Query to HashTable (Thread-safe)
 							if (m_fineProfile) { cudT0 = cudRdtsc(); }
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_r, h))
 							{
 								if (m_fineProfile)
@@ -1942,6 +1953,7 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 							_km_f >>= 2;
 							_km_f ^= m_pTable[m_table[_map[i_c]]];
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_f, h))
 							{
 								if (iTable[h] != token)
@@ -1968,6 +1980,7 @@ void CLARK<HKMERr>::getObjectsDataCompute(const uint8_t * _map, const size_t&  n
 						{
 							_isfull = true;
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_r, h))
 							{
 								if (iTable[h] != token)
@@ -2095,6 +2108,7 @@ void CLARK<HKMERr>::getObjectsDataComputeFastLight(const uint8_t * _map, const s
 							_km_f >>= 2;
 							_km_f += m_pTable[m_table[_map[i_c]]];
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_f, h))
 							{
 								opt_h = h+1; break;
@@ -2108,6 +2122,7 @@ void CLARK<HKMERr>::getObjectsDataComputeFastLight(const uint8_t * _map, const s
 						{
 							_isfull = true;
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_r, h))
 							{
 								opt_h = h+1; break;
@@ -2258,6 +2273,7 @@ void CLARK<HKMERr>::getObjectsDataComputeFastLight(const uint8_t * _map, const s
 							_km_f >>= 2;
 							_km_f += m_pTable[m_table[_map[i_c]]];
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_f, h))
 							{
 								opt_h = h+1; break;
@@ -2271,6 +2287,7 @@ void CLARK<HKMERr>::getObjectsDataComputeFastLight(const uint8_t * _map, const s
 						{
 							_isfull = true;
 							// Query to HashTable (Thread-safe)
+							if (m_profile) { m_queryCount[i_r]++; }
 							if (m_centralHt->queryElement(_km_r, h))
 							{
 								opt_h = h+1; break;
@@ -3060,12 +3077,24 @@ void CLARK<HKMERr>::printCuDProfile(const struct timeval& _requestStart, const s
 	// Note: gettimeofday only has microsecond resolution, so these ns
 	// values are exact multiples of 1000 -- the unit is nanoseconds, but
 	// the underlying resolution is still microseconds.
+	uint64_t queryCount = 0;
+	for (size_t t = 0; t < m_nbCPU; t++)
+	{
+		queryCount += m_queryCount[t];
+	}
+	// query_width_bits: each k-mer query is a 2-bits-per-base packed
+	// integer (see queryElement's callers), so the width scales with -k.
+	// db_entries: total number of discriminative k-mers loaded into the
+	// central hash table this query stream is matched against.
 	cout << "CUD_PROFILE build_ns=" << (m_buildTimeSec * 1e9)
 		<< " load_ns=" << (m_loadTimeSec * 1e9)
 		<< " match_ns=" << (matchDiffSec * 1e9)
 		<< " write_ns=" << (writeDiffSec * 1e9)
 		<< " kmer=" << m_kmerSize
 		<< " nbObjects=" << m_nbObjects
+		<< " num_queries=" << queryCount
+		<< " query_width_bits=" << (m_kmerSize * 2)
+		<< " db_entries=" << m_centralHt->Size()
 		<< endl;
 }
 

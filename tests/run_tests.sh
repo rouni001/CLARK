@@ -2211,10 +2211,23 @@ print(seq[100:250])
 	[ -n "$line" ] || fail "CLARK-l did not print a CUD_PROFILE line with CLARK_CUD_PROFILE=1"
 
 	# CLARK-l ignores -k and always uses its own light k-mer size (27).
-	printf '%s\n' "$line" | grep -Eq 'build_ns=[0-9.e+-]+ load_ns=[0-9.e+-]+ match_ns=[0-9.e+-]+ write_ns=[0-9.e+-]+ kmer=27 nbObjects=1$' \
+	printf '%s\n' "$line" | grep -Eq 'build_ns=[0-9.e+-]+ load_ns=[0-9.e+-]+ match_ns=[0-9.e+-]+ write_ns=[0-9.e+-]+ kmer=27 nbObjects=1 num_queries=[0-9]+ query_width_bits=54 db_entries=[0-9]+$' \
 		|| fail "CUD_PROFILE line has an unexpected format: $line"
 
-	pass "CLARK_CUD_PROFILE opt-in prints a build/load/match/write breakdown only when requested"
+	num_queries="$(printf '%s\n' "$line" | grep -oE 'num_queries=[0-9]+' | cut -d= -f2)"
+	db_entries="$(printf '%s\n' "$line" | grep -oE 'db_entries=[0-9]+' | cut -d= -f2)"
+
+	# 150bp read, k=27 -> at most 150-27+1=124 k-mer lookups (fewer if the
+	# light-mode loop breaks early on its first hit).
+	[ "$num_queries" -gt 0 ] || fail "CUD_PROFILE reported num_queries=0, expected at least one k-mer lookup"
+	[ "$num_queries" -le 124 ] || fail "CUD_PROFILE reported num_queries=$num_queries, more than the read has k-mer positions (124)"
+	# Regression check: hTable::read() used to compute the loaded k-mer
+	# count locally and discard it without ever recording it in m_load, so
+	# db_entries (EHashtable::Size() -> hTable::Load() -> m_load) always
+	# read back 0 for a real, successfully-loaded database.
+	[ "$db_entries" -gt 0 ] || fail "CUD_PROFILE reported db_entries=0 for a non-empty loaded database (regression: hTable::read() not recording m_load)"
+
+	pass "CLARK_CUD_PROFILE opt-in prints a build/load/match/write/query-count/db-size breakdown only when requested"
 }
 
 test_get_targets_def_smoke() {

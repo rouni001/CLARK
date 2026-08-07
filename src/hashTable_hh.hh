@@ -846,6 +846,7 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 		close(fd_k);
 
 		_fileSize = HTSIZE + _fileSizek + _fileSizel;
+		m_load = nbElement;
 
 		return true;
 	}
@@ -942,7 +943,9 @@ bool hTable<HKMERr, ELMTr>::read(const char * _filename, size_t& _fileSize,  con
 	fclose(fd_k);
 	fclose(fd_s);
 
-	return true;	
+	m_load = nbElement;
+
+	return true;
 }
 
 	template <typename HKMERr, typename ELMTr>
